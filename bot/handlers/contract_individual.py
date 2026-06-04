@@ -125,12 +125,14 @@ async def ru_passport_document(message: Message, state: FSMContext, bot: Bot) ->
     raw = await bot.download_file(file.file_path)
     img_bytes = raw.read()
     if mime == "application/pdf":
-        img_bytes = claude_service.pdf_to_jpeg(img_bytes)
+        pages = claude_service.pdf_to_jpegs(img_bytes)
+        passport_input = pages
         media_type = "image/jpeg"
     else:
+        passport_input = img_bytes
         media_type = "image/png" if mime == "image/png" else "image/jpeg"
     try:
-        passport = await claude_service.extract_ru_passport(img_bytes, media_type=media_type)
+        passport = await claude_service.extract_ru_passport(passport_input, media_type=media_type)
     except Exception as e:
         await message.answer(f"Не удалось прочитать паспорт: {e}\nВведите данные текстом.")
         return

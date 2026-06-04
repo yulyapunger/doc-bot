@@ -12,12 +12,14 @@ _client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
 MODEL = "claude-sonnet-4-6"
 
 
-def pdf_to_jpeg(pdf_bytes: bytes) -> bytes:
-    """Конвертирует первую страницу PDF в JPEG для передачи в Claude."""
+def pdf_to_jpegs(pdf_bytes: bytes) -> list[bytes]:
+    """Конвертирует все страницы PDF в JPEG-изображения."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    page = doc[0]
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-    return pix.tobytes("jpeg")
+    images = []
+    for page in doc:
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        images.append(pix.tobytes("jpeg"))
+    return images
 
 
 def _image_content(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
@@ -39,35 +41,36 @@ def _parse_json(text: str) -> dict:
     return json.loads(match.group())
 
 
-async def extract_ru_passport(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
+async def extract_ru_passport(
+    image_bytes: bytes | list[bytes],
+    media_type: str = "image/jpeg",
+) -> dict:
     """
     Возвращает:
       full_name, series, number, issued_by, issue_date, registration_address
+
+    image_bytes может быть одним изображением или списком страниц (для PDF).
     """
+    pages = image_bytes if isinstance(image_bytes, list) else [image_bytes]
+    content: list[dict] = [_image_content(p, media_type) for p in pages]
+    content.append({
+        "type": "text",
+        "text": (
+            "Извлеки данные из российского паспорта (может быть несколько страниц: "
+            "основной разворот и страница с пропиской). "
+            "Верни ТОЛЬКО JSON без пояснений:\n"
+            '{"full_name": "Фамилия Имя Отчество", '
+            '"series": "0000", '
+            '"number": "000000", '
+            '"issued_by": "...", '
+            '"issue_date": "ДД.ММ.ГГГГ", '
+            '"registration_address": "..."}'
+        ),
+    })
     response = await _client.messages.create(
         model=MODEL,
         max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    _image_content(image_bytes, media_type),
-                    {
-                        "type": "text",
-                        "text": (
-                            "Извлеки данные из российского паспорта. "
-                            "Верни ТОЛЬКО JSON без пояснений:\n"
-                            '{"full_name": "Фамилия Имя Отчество", '
-                            '"series": "0000", '
-                            '"number": "000000", '
-                            '"issued_by": "...", '
-                            '"issue_date": "ДД.ММ.ГГГГ", '
-                            '"registration_address": "..."}'
-                        ),
-                    },
-                ],
-            }
-        ],
+        messages=[{"role": "user", "content": content}],
     )
     return _parse_json(response.content[0].text)
 
