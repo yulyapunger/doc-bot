@@ -3,12 +3,21 @@ import json
 import re
 
 import anthropic
+import fitz  # PyMuPDF
 
 from bot.config import config
 
 _client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
 
 MODEL = "claude-sonnet-4-6"
+
+
+def pdf_to_jpeg(pdf_bytes: bytes) -> bytes:
+    """Конвертирует первую страницу PDF в JPEG для передачи в Claude."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page = doc[0]
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+    return pix.tobytes("jpeg")
 
 
 def _image_content(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:

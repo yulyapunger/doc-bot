@@ -116,18 +116,21 @@ async def ru_passport_photo(message: Message, state: FSMContext, bot: Bot) -> No
 @router.message(IndividualContract.ru_passport, F.document)
 async def ru_passport_document(message: Message, state: FSMContext, bot: Bot) -> None:
     mime = (message.document.mime_type or "").lower()
-    if mime not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
-        await message.answer(
-            "Поддерживаются файлы JPEG и PNG.\n"
-            "Для PDF — сначала сделайте скриншот и отправьте как фото или файл JPEG."
-        )
+    supported = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if mime not in supported:
+        await message.answer("Поддерживаются файлы JPEG, PNG и PDF.")
         return
     await message.answer("Читаю паспорт...")
     file = await bot.get_file(message.document.file_id)
-    data = await bot.download_file(file.file_path)
-    media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    raw = await bot.download_file(file.file_path)
+    img_bytes = raw.read()
+    if mime == "application/pdf":
+        img_bytes = claude_service.pdf_to_jpeg(img_bytes)
+        media_type = "image/jpeg"
+    else:
+        media_type = "image/png" if mime == "image/png" else "image/jpeg"
     try:
-        passport = await claude_service.extract_ru_passport(data.read(), media_type=media_type)
+        passport = await claude_service.extract_ru_passport(img_bytes, media_type=media_type)
     except Exception as e:
         await message.answer(f"Не удалось прочитать паспорт: {e}\nВведите данные текстом.")
         return
@@ -185,18 +188,21 @@ async def foreign_passport_photo(message: Message, state: FSMContext, bot: Bot) 
 @router.message(IndividualContract.foreign_passport, F.document)
 async def foreign_passport_document(message: Message, state: FSMContext, bot: Bot) -> None:
     mime = (message.document.mime_type or "").lower()
-    if mime not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
-        await message.answer(
-            "Поддерживаются файлы JPEG и PNG.\n"
-            "Для PDF — сначала сделайте скриншот и отправьте как фото или файл JPEG."
-        )
+    supported = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if mime not in supported:
+        await message.answer("Поддерживаются файлы JPEG, PNG и PDF.")
         return
     await message.answer("Читаю загранпаспорт...")
     file = await bot.get_file(message.document.file_id)
-    data = await bot.download_file(file.file_path)
-    media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    raw = await bot.download_file(file.file_path)
+    img_bytes = raw.read()
+    if mime == "application/pdf":
+        img_bytes = claude_service.pdf_to_jpeg(img_bytes)
+        media_type = "image/jpeg"
+    else:
+        media_type = "image/png" if mime == "image/png" else "image/jpeg"
     try:
-        passport = await claude_service.extract_foreign_passport(data.read(), media_type=media_type)
+        passport = await claude_service.extract_foreign_passport(img_bytes, media_type=media_type)
     except Exception as e:
         await message.answer(f"Не удалось прочитать загранпаспорт: {e}\nВведите данные текстом.")
         return
@@ -403,15 +409,21 @@ async def tourist_foreign_photo(message: Message, state: FSMContext, bot: Bot) -
 @router.message(IndividualContract.tourist_foreign, F.document)
 async def tourist_foreign_document(message: Message, state: FSMContext, bot: Bot) -> None:
     mime = (message.document.mime_type or "").lower()
-    if mime not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
-        await message.answer("Поддерживаются файлы JPEG и PNG.")
+    supported = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if mime not in supported:
+        await message.answer("Поддерживаются файлы JPEG, PNG и PDF.")
         return
     await message.answer("Читаю загранпаспорт...")
     file = await bot.get_file(message.document.file_id)
-    data_bytes = await bot.download_file(file.file_path)
-    media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    raw = await bot.download_file(file.file_path)
+    img_bytes = raw.read()
+    if mime == "application/pdf":
+        img_bytes = claude_service.pdf_to_jpeg(img_bytes)
+        media_type = "image/jpeg"
+    else:
+        media_type = "image/png" if mime == "image/png" else "image/jpeg"
     try:
-        passport = await claude_service.extract_foreign_passport(data_bytes.read(), media_type=media_type)
+        passport = await claude_service.extract_foreign_passport(img_bytes, media_type=media_type)
     except Exception as e:
         await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
         return
