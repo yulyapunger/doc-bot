@@ -1,10 +1,12 @@
 import io
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 
 from docx import Document
+from docx.oxml.ns import qn
 from docx.shared import Inches
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
@@ -174,34 +176,53 @@ def _replace_in_paragraph(paragraph, replacements: dict) -> None:
         if ph in full_text:
             full_text = full_text.replace(ph, str(value) if value is not None else "")
             changed = True
-    if changed and paragraph.runs:
-        paragraph.runs[0].text = full_text
-        for run in paragraph.runs[1:]:
-            run.text = ""
+    if not changed or not paragraph.runs:
+        return
+
+    parts = full_text.split('\n')
+    paragraph.runs[0].text = parts[0]
+    for run in paragraph.runs[1:]:
+        run.text = ""
+
+    if len(parts) > 1:
+        run0 = paragraph.runs[0]
+        for part in parts[1:]:
+            br = run0._r.makeelement(qn('w:br'))
+            run0._r.append(br)
+            t_elem = run0._r.makeelement(qn('w:t'))
+            t_elem.text = part
+            if part != part.strip():
+                t_elem.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            run0._r.append(t_elem)
 
 
 def _insert_executor_signature(doc: Document) -> None:
-    """Вставляет подпись исполнителя в ячейки левого столбца таблиц подписей."""
+    """Вставляет подпись исполнителя во все таблицы подписей где упоминается исполнитель."""
     if not SIGNATURE_PATH.exists():
         return
 
     for table in doc.tables:
+        table_text = "\n".join(
+            p.text
+            for row in table.rows
+            for cell in row.cells
+            for p in cell.paragraphs
+        )
+        is_executor_table = any(x in table_text for x in ("Распопов", "предприниматель", "Исполнитель"))
+        if not is_executor_table:
+            continue
+
         for row in table.rows:
             if not row.cells:
                 continue
             cell = row.cells[0]
             cell_text = "\n".join(p.text for p in cell.paragraphs)
-
-            # Ищем ячейку исполнителя: есть строка подписи И упоминание Распопова/ИП
-            has_sig_line = "_____" in cell_text
-            is_executor  = any(x in cell_text for x in ("Распопов", "предприниматель", "Исполнитель"))
-            if not (has_sig_line and is_executor):
+            if "_____" not in cell_text:
                 continue
 
             for para in cell.paragraphs:
                 if "_____" not in para.text:
                     continue
-                # Убираем символы подписной строки из runs
                 for run in para.runs:
                     run.text = (
                         run.text
@@ -210,9 +231,15 @@ def _insert_executor_signature(doc: Document) -> None:
                         .replace("/_____________/", "")
                         .replace("_____________", "")
                     )
-                # Добавляем изображение подписи
                 para.add_run().add_picture(str(SIGNATURE_PATH), width=Inches(2))
-                break  # одна ячейка — один раз
+                break
+
+
+def _add_page_breaks(doc: Document) -> None:
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip()
+        if text.startswith("Приложение №") or text == "СОГЛАСИЕ":
+            paragraph.paragraph_format.page_break_before = True
 
 
 def _fill_document(template_path: Path, replacements: dict) -> bytes:
@@ -227,6 +254,7 @@ def _fill_document(template_path: Path, replacements: dict) -> bytes:
                 for paragraph in cell.paragraphs:
                     _replace_in_paragraph(paragraph, replacements)
 
+    _add_page_breaks(doc)
     _insert_executor_signature(doc)
 
     buf = io.BytesIO()
@@ -265,22 +293,28 @@ def build_individual_replacements(data: dict) -> dict:
     # Туристы (до 2 в таблице; остальные — в ADD_COND)
     def tourist_row(t):
         return {
-            "name":     f"{t.get('surname_latin','')} {t.get('name_latin','')}".strip(),
-            "gender":   t.get("gender", ""),
-            "dob":      t.get("date_of_birth", ""),
-            "passport": t.get("passport_number", ""),
+            "name":        f"{t.get('surname_latin','')} {t.get('name_latin','')}".strip(),
+            "gender":      t.get("gender", ""),
+            "dob":         t.get("date_of_birth", ""),
+            "passport":    t.get("passport_number", ""),
+            "valid_until": t.get("valid_until", ""),
         }
 
     t1 = tourist_row(tourists[0]) if len(tourists) > 0 else {}
     t2 = tourist_row(tourists[1]) if len(tourists) > 1 else {}
 
-    # Дополнительные условия (до 8 строк)
+    # Дополнительные условия — все в ADD_COND_1 через переносы строк
     add_cond_raw = data.get("additional_conditions", "") or ""
     add_cond_lines = [l.strip() for l in add_cond_raw.splitlines() if l.strip()]
-    add_cond = {f"ADD_COND_{i+1}": (add_cond_lines[i] if i < len(add_cond_lines) else "") for i in range(8)}
+    combined_cond = "\n".join(f"- {line}" for line in add_cond_lines) if add_cond_lines else ""
+    add_cond = {"ADD_COND_1": combined_cond, **{f"ADD_COND_{i+1}": "" for i in range(1, 8)}}
+
+    # Количество номеров
+    room_count = data.get("room_count", "")
+    room_count_display = f"{room_count} (при двухместном размещении)" if room_count == "½" else room_count
 
     return {
-        "CONTRACT_NUMBER_FULL":          f"№ {number}",
+        "CONTRACT_NUMBER_FULL":          f"№ {number} ",
         "CONTRACT_NUMBER_SHORT":         number,
         "CONTRACT_DATE":                 format_date_full(date_str),
         "CONTRACT_DATE_PART":            format_date_part(date_str),
@@ -298,17 +332,19 @@ def build_individual_replacements(data: dict) -> dict:
         "TOURIST_1_GENDER":              t1.get("gender", ""),
         "TOURIST_1_DOB":                 t1.get("dob", ""),
         "TOURIST_1_PASSPORT":            t1.get("passport", ""),
+        "TOURIST_1_VALID_UNTIL":         t1.get("valid_until", ""),
         "TOURIST_2_NAME":                t2.get("name", ""),
         "TOURIST_2_GENDER":              t2.get("gender", ""),
         "TOURIST_2_DOB":                 t2.get("dob", ""),
         "TOURIST_2_PASSPORT":            t2.get("passport", ""),
+        "TOURIST_2_VALID_UNTIL":         t2.get("valid_until", ""),
         "COUNTRY_CITY":                  f"{data.get('country','')} {data.get('city','')}".strip(", "),
         "HOTEL":                         data.get("hotel", ""),
         "CHECK_IN_DATE":                 data.get("check_in_date", ""),
         "CHECK_OUT_DATE":                data.get("check_out_date", ""),
         "NIGHTS":                        str(data.get("nights", "")),
         "ROOM_TYPE":                     data.get("room_type", ""),
-        "ROOM_COUNT":                    data.get("room_count", ""),
+        "ROOM_COUNT":                    room_count_display,
         "MEAL_TYPE":                     data.get("meal_type", ""),
         "TRANSFER":                      data.get("transfer", "нет"),
         "INSURANCE":                     "да" if data.get("insurance") else "нет",

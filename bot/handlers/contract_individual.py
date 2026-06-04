@@ -1,3 +1,4 @@
+import re
 from datetime import date
 
 from aiogram import Bot, F, Router
@@ -112,6 +113,28 @@ async def ru_passport_photo(message: Message, state: FSMContext, bot: Bot) -> No
     await _ask_foreign_passport(message, state)
 
 
+@router.message(IndividualContract.ru_passport, F.document)
+async def ru_passport_document(message: Message, state: FSMContext, bot: Bot) -> None:
+    mime = (message.document.mime_type or "").lower()
+    if mime not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
+        await message.answer(
+            "Поддерживаются файлы JPEG и PNG.\n"
+            "Для PDF — сначала сделайте скриншот и отправьте как фото или файл JPEG."
+        )
+        return
+    await message.answer("Читаю паспорт...")
+    file = await bot.get_file(message.document.file_id)
+    data = await bot.download_file(file.file_path)
+    media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    try:
+        passport = await claude_service.extract_ru_passport(data.read(), media_type=media_type)
+    except Exception as e:
+        await message.answer(f"Не удалось прочитать паспорт: {e}\nВведите данные текстом.")
+        return
+    await state.update_data(ru_passport=passport)
+    await _ask_foreign_passport(message, state)
+
+
 @router.message(IndividualContract.ru_passport, F.text)
 async def ru_passport_text(message: Message, state: FSMContext) -> None:
     lines = [l.strip() for l in message.text.strip().splitlines() if l.strip()]
@@ -152,6 +175,28 @@ async def foreign_passport_photo(message: Message, state: FSMContext, bot: Bot) 
     data = await bot.download_file(file.file_path)
     try:
         passport = await claude_service.extract_foreign_passport(data.read())
+    except Exception as e:
+        await message.answer(f"Не удалось прочитать загранпаспорт: {e}\nВведите данные текстом.")
+        return
+    await state.update_data(foreign_passport=passport)
+    await _ask_phone(message, state)
+
+
+@router.message(IndividualContract.foreign_passport, F.document)
+async def foreign_passport_document(message: Message, state: FSMContext, bot: Bot) -> None:
+    mime = (message.document.mime_type or "").lower()
+    if mime not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
+        await message.answer(
+            "Поддерживаются файлы JPEG и PNG.\n"
+            "Для PDF — сначала сделайте скриншот и отправьте как фото или файл JPEG."
+        )
+        return
+    await message.answer("Читаю загранпаспорт...")
+    file = await bot.get_file(message.document.file_id)
+    data = await bot.download_file(file.file_path)
+    media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    try:
+        passport = await claude_service.extract_foreign_passport(data.read(), media_type=media_type)
     except Exception as e:
         await message.answer(f"Не удалось прочитать загранпаспорт: {e}\nВведите данные текстом.")
         return
@@ -349,6 +394,24 @@ async def tourist_foreign_photo(message: Message, state: FSMContext, bot: Bot) -
     data_bytes = await bot.download_file(file.file_path)
     try:
         passport = await claude_service.extract_foreign_passport(data_bytes.read())
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
+        return
+    await _save_tourist(message, state, passport)
+
+
+@router.message(IndividualContract.tourist_foreign, F.document)
+async def tourist_foreign_document(message: Message, state: FSMContext, bot: Bot) -> None:
+    mime = (message.document.mime_type or "").lower()
+    if mime not in ("image/jpeg", "image/jpg", "image/png", "image/webp"):
+        await message.answer("Поддерживаются файлы JPEG и PNG.")
+        return
+    await message.answer("Читаю загранпаспорт...")
+    file = await bot.get_file(message.document.file_id)
+    data_bytes = await bot.download_file(file.file_path)
+    media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    try:
+        passport = await claude_service.extract_foreign_passport(data_bytes.read(), media_type=media_type)
     except Exception as e:
         await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
         return
@@ -589,12 +652,22 @@ async def _ask_finances(message: Message, state: FSMContext) -> None:
     await message.answer("Шаг 7/10: Общая стоимость тура (руб.):", reply_markup=cancel_kb())
 
 
+def _parse_amount(text: str) -> float:
+    text = text.strip().replace(" ", "").replace("\xa0", "")
+    # "200.000" или "1.200.000" — точка как разделитель тысяч
+    if re.match(r'^\d{1,3}(\.\d{3})+$', text):
+        text = text.replace(".", "")
+    else:
+        text = text.replace(",", ".")
+    return float(text)
+
+
 @router.message(IndividualContract.finance_total, F.text)
 async def finance_total(message: Message, state: FSMContext) -> None:
     try:
-        total = float(message.text.strip().replace(" ", "").replace(",", "."))
+        total = _parse_amount(message.text)
     except ValueError:
-        await message.answer("Введите число (например: 150000):")
+        await message.answer("Введите число (например: 150000 или 200.000):")
         return
     await state.update_data(total_price=total)
     await state.set_state(IndividualContract.finance_deposit)
@@ -604,7 +677,7 @@ async def finance_total(message: Message, state: FSMContext) -> None:
 @router.message(IndividualContract.finance_deposit, F.text)
 async def finance_deposit(message: Message, state: FSMContext) -> None:
     try:
-        deposit = float(message.text.strip().replace(" ", "").replace(",", "."))
+        deposit = _parse_amount(message.text)
     except ValueError:
         await message.answer("Введите число:")
         return

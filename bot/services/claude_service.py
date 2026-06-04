@@ -30,7 +30,7 @@ def _parse_json(text: str) -> dict:
     return json.loads(match.group())
 
 
-async def extract_ru_passport(image_bytes: bytes) -> dict:
+async def extract_ru_passport(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
     """
     Возвращает:
       full_name, series, number, issued_by, issue_date, registration_address
@@ -42,7 +42,7 @@ async def extract_ru_passport(image_bytes: bytes) -> dict:
             {
                 "role": "user",
                 "content": [
-                    _image_content(image_bytes),
+                    _image_content(image_bytes, media_type),
                     {
                         "type": "text",
                         "text": (
@@ -63,10 +63,10 @@ async def extract_ru_passport(image_bytes: bytes) -> dict:
     return _parse_json(response.content[0].text)
 
 
-async def extract_foreign_passport(image_bytes: bytes) -> dict:
+async def extract_foreign_passport(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
     """
     Возвращает:
-      surname_latin, name_latin, passport_number, date_of_birth, valid_until
+      surname_latin, name_latin, gender, passport_number, date_of_birth, valid_until
     """
     response = await _client.messages.create(
         model=MODEL,
@@ -75,14 +75,16 @@ async def extract_foreign_passport(image_bytes: bytes) -> dict:
             {
                 "role": "user",
                 "content": [
-                    _image_content(image_bytes),
+                    _image_content(image_bytes, media_type),
                     {
                         "type": "text",
                         "text": (
                             "Извлеки данные из заграничного паспорта. "
+                            "Пол определи по полю SEX/MRZ строке или визуально: М для мужчины, Ж для женщины. "
                             "Верни ТОЛЬКО JSON без пояснений:\n"
                             '{"surname_latin": "SURNAME", '
                             '"name_latin": "FIRSTNAME", '
+                            '"gender": "М или Ж", '
                             '"passport_number": "...", '
                             '"date_of_birth": "ДД.ММ.ГГГГ", '
                             '"valid_until": "ДД.ММ.ГГГГ"}'
