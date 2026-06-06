@@ -360,6 +360,7 @@ async def _ask_tourists(message: Message, state: FSMContext) -> None:
         "full_name": ru.get("full_name"),
         "surname_latin": fg.get("surname_latin"),
         "name_latin": fg.get("name_latin"),
+        "gender": fg.get("gender", ""),
         "passport_number": fg.get("passport_number"),
         "date_of_birth": fg.get("date_of_birth"),
         "valid_until": fg.get("valid_until"),
@@ -846,10 +847,11 @@ async def _generate_contract(
         _tour_name=f"{data.get('country', '')} {data.get('check_in_date', '')[:4] if data.get('check_in_date') else ''}".strip(),
     )
 
+    gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(
         BufferedInputFile(pdf_bytes, filename=f"{filename}.pdf"),
         caption=f"Договор № {number} готов.",
-        reply_markup=after_generate_kb(),
+        reply_markup=after_generate_kb(gdrive_configured=gdrive_ok),
     )
     await state.set_state(IndividualContract.after_generate)
 

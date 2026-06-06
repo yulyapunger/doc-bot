@@ -151,10 +151,11 @@ def number_kb(current_number: str) -> InlineKeyboardMarkup:
 
 # ── После генерации ────────────────────────────────────────────────────────────
 
-def after_generate_kb(show_docx: bool = True) -> InlineKeyboardMarkup:
+def after_generate_kb(show_docx: bool = True, gdrive_configured: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="Отправить на Google Drive", callback_data="gdrive:upload"))
-    builder.row(InlineKeyboardButton(text="Пропустить", callback_data="gdrive:skip"))
+    if gdrive_configured:
+        builder.row(InlineKeyboardButton(text="Отправить на Google Drive", callback_data="gdrive:upload"))
+    builder.row(InlineKeyboardButton(text="Готово", callback_data="gdrive:skip"))
     if show_docx:
         builder.row(InlineKeyboardButton(text="Получить DOCX для редактирования", callback_data="get_docx"))
     return builder.as_markup()

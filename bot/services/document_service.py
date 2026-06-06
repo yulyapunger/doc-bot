@@ -235,6 +235,22 @@ def _insert_executor_signature(doc: Document) -> None:
                 break
 
 
+def _remove_empty_list_paragraphs(doc: Document) -> None:
+    """Удаляет пустые параграфы с list-форматированием (иначе рендерятся как '-')."""
+    ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    numPr_tag = f"{{{ns}}}numPr"
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                paragraphs = cell.paragraphs
+                to_remove = [
+                    p._element for p in paragraphs[:-1]
+                    if not p.text.strip() and p._element.find(f".//{numPr_tag}") is not None
+                ]
+                for el in to_remove:
+                    el.getparent().remove(el)
+
+
 def _add_page_breaks(doc: Document) -> None:
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
@@ -254,6 +270,7 @@ def _fill_document(template_path: Path, replacements: dict) -> bytes:
                 for paragraph in cell.paragraphs:
                     _replace_in_paragraph(paragraph, replacements)
 
+    _remove_empty_list_paragraphs(doc)
     _add_page_breaks(doc)
     _insert_executor_signature(doc)
 
