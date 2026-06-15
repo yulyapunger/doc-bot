@@ -282,6 +282,8 @@ def _clone_table_row(doc: Document, anchor_placeholder: str, count: int, old_pre
     для n = 3, 4, ... — для отображения 3-го и последующих туристов/сотрудников."""
     if count <= 0:
         return
+    old_num_match = re.search(r"(\d+)", old_prefix)
+    old_num = old_num_match.group(1) if old_num_match else None
     for table in doc.tables:
         for row in table.rows:
             row_text = "\n".join(p.text for cell in row.cells for p in cell.paragraphs)
@@ -293,6 +295,8 @@ def _clone_table_row(doc: Document, anchor_placeholder: str, count: int, old_pre
                     for t in new_row.iter(qn('w:t')):
                         if t.text and old_prefix in t.text:
                             t.text = t.text.replace(old_prefix, new_prefix_fmt.format(new_index))
+                        elif t.text and old_num is not None and t.text.strip() == old_num:
+                            t.text = t.text.replace(old_num, str(new_index))
                     prev.addnext(new_row)
                     prev = new_row
                 return
@@ -467,6 +471,15 @@ def build_legal_replacements(data: dict) -> dict:
     e1 = emp_row(employees[0]) if len(employees) > 0 else {}
     e2 = emp_row(employees[1]) if len(employees) > 1 else {}
 
+    employee_placeholders = {}
+    for idx, e in enumerate(employees[2:], start=3):
+        row = emp_row(e)
+        employee_placeholders[f"EMPLOYEE_{idx}_NAME"] = row.get("name", "")
+        employee_placeholders[f"EMPLOYEE_{idx}_DOB"] = row.get("dob", "")
+        employee_placeholders[f"EMPLOYEE_{idx}_PASSPORT"] = row.get("passport", "")
+        employee_placeholders[f"EMPLOYEE_{idx}_ISSUE_DATE"] = row.get("issue_date", "")
+        employee_placeholders[f"EMPLOYEE_{idx}_VALID_UNTIL"] = row.get("valid_until", "")
+
     # Юридическая форма и короткое имя: "ООО «Торговый Дом Батиссур»" → form="ООО", short="«Торговый Дом Батиссур»"
     full_name = c.get("company_name", "")
     legal_form = c.get("legal_form", "")
@@ -533,6 +546,7 @@ def build_legal_replacements(data: dict) -> dict:
         "INSURANCE":                    "Да" if data.get("insurance") else "Нет",
         **add_cond,
         "TOTAL_PRICE_RUB":              f"{total:,.0f} руб.".replace(",", " "),
+        **employee_placeholders,
     }
 
 
@@ -564,7 +578,10 @@ def generate_legal_contract(data: dict) -> tuple[bytes, bytes]:
     """Возвращает (pdf_bytes, docx_bytes)."""
     replacements = build_legal_replacements(data)
     template = TEMPLATES_DIR / "contract_legal.docx"
-    docx_bytes = _fill_document(template, replacements)
+    employee_count = len(data.get("employees", []))
+    remove_rows = ["{{EMPLOYEE_2_NAME}}"] if employee_count < 2 else []
+    clone_rows = [("{{EMPLOYEE_2_NAME}}", employee_count - 2, "EMPLOYEE_2_", "EMPLOYEE_{}_")] if employee_count > 2 else []
+    docx_bytes = _fill_document(template, replacements, remove_rows, clone_rows)
     pdf_bytes  = _docx_to_pdf(docx_bytes)
     return pdf_bytes, docx_bytes
 
