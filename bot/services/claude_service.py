@@ -83,7 +83,7 @@ async def extract_ru_passport(
 async def extract_foreign_passport(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
     """
     Возвращает:
-      surname_latin, name_latin, gender, passport_number, date_of_birth, valid_until
+      surname_latin, name_latin, gender, passport_number, date_of_birth, issue_date, valid_until
     """
     response = await _client.messages.create(
         model=MODEL,
@@ -104,6 +104,7 @@ async def extract_foreign_passport(image_bytes: bytes, media_type: str = "image/
                             '"gender": "М или Ж", '
                             '"passport_number": "...", '
                             '"date_of_birth": "ДД.ММ.ГГГГ", '
+                            '"issue_date": "ДД.ММ.ГГГГ", '
                             '"valid_until": "ДД.ММ.ГГГГ"}'
                         ),
                     },

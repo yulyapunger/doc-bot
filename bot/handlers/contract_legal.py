@@ -688,10 +688,11 @@ async def _generate_legal_contract(
         _tour_name=f"{data.get('country', '')} {data.get('check_in_date', '')[:4] if data.get('check_in_date') else ''}".strip(),
     )
 
+    gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(
         BufferedInputFile(pdf_bytes, filename=f"{filename}.pdf"),
         caption=f"Договор № {number} готов.",
-        reply_markup=after_generate_kb(),
+        reply_markup=after_generate_kb(gdrive_configured=gdrive_ok),
     )
     await state.set_state(LegalContract.after_generate)
 

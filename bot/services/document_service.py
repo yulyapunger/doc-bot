@@ -473,10 +473,15 @@ def build_legal_replacements(data: dict) -> dict:
     short_name_raw = full_name.replace(legal_form, "").strip()
     short_name_display = short_name_raw if (short_name_raw.startswith("«") or short_name_raw.startswith('"')) else f"«{short_name_raw}»"
 
-    # Дополнительные условия (до 11 строк для юрлица)
+    # Дополнительные условия — все в ADD_COND_1 через переносы строк
     add_cond_raw = data.get("additional_conditions", "") or ""
     add_cond_lines = [l.strip() for l in add_cond_raw.splitlines() if l.strip()]
-    add_cond = {f"ADD_COND_{i+1}": (f"- {add_cond_lines[i]}" if i < len(add_cond_lines) else "-") for i in range(11)}
+    combined_cond = "\n".join(f"- {line}" for line in add_cond_lines) if add_cond_lines else ""
+    add_cond = {"ADD_COND_1": combined_cond}
+
+    # Количество номеров
+    room_count = data.get("room_count", "")
+    room_count_display = f"{room_count} (при двухместном размещении)" if room_count == "½" else room_count
 
     # INN/KPP форматы
     inn = c.get("inn", "")
@@ -524,7 +529,7 @@ def build_legal_replacements(data: dict) -> dict:
         "CHECK_OUT_DATE":               data.get("check_out_date", ""),
         "NIGHTS":                       str(data.get("nights", "")),
         "ROOM_TYPE":                    data.get("room_type", ""),
-        "ROOM_COUNT":                   data.get("room_count", ""),
+        "ROOM_COUNT":                   room_count_display,
         "INSURANCE":                    "Да" if data.get("insurance") else "Нет",
         **add_cond,
         "TOTAL_PRICE_RUB":              f"{total:,.0f} руб.".replace(",", " "),
