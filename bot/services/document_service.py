@@ -389,7 +389,7 @@ def build_individual_replacements(data: dict) -> dict:
     add_cond_raw = data.get("additional_conditions", "") or ""
     add_cond_lines = [l.strip() for l in add_cond_raw.splitlines() if l.strip()]
     combined_cond = "\n".join(f"- {line}" for line in add_cond_lines) if add_cond_lines else ""
-    add_cond = {"ADD_COND_1": combined_cond, **{f"ADD_COND_{i+1}": "" for i in range(1, 8)}}
+    add_cond = {"ADD_COND_1": combined_cond}
 
     # Количество номеров
     room_count = data.get("room_count", "")
