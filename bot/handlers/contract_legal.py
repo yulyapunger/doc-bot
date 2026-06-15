@@ -26,6 +26,7 @@ from bot.keyboards.common import (
     yes_no_kb,
 )
 from bot.services import claude_service, document_service, gdrive_service
+from bot.utils.album import collect_album_photos
 
 router = Router()
 
@@ -90,12 +91,12 @@ async def start_legal(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(LegalContract.company_card, F.photo)
 async def company_card_photo(message: Message, state: FSMContext, bot: Bot) -> None:
+    pages = await collect_album_photos(message, state, bot)
+    if pages is None:
+        return
     await message.answer("Читаю карточку компании...")
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    data = await bot.download_file(file.file_path)
     try:
-        company = await claude_service.extract_company_card(data.read())
+        company = await claude_service.extract_company_card(pages[0])
     except Exception as e:
         await message.answer(f"Не удалось прочитать карточку: {e}\nВведите данные текстом.")
         return
@@ -243,12 +244,12 @@ async def employees_done(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(LegalContract.employee_passport, F.photo)
 async def employee_photo(message: Message, state: FSMContext, bot: Bot) -> None:
+    pages = await collect_album_photos(message, state, bot)
+    if pages is None:
+        return
     await message.answer("Читаю загранпаспорт...")
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    data_bytes = await bot.download_file(file.file_path)
     try:
-        passport = await claude_service.extract_foreign_passport(data_bytes.read())
+        passport = await claude_service.extract_foreign_passport(pages[0])
     except Exception as e:
         await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
         return

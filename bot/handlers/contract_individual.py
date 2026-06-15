@@ -27,6 +27,7 @@ from bot.keyboards.common import (
     yes_no_kb,
 )
 from bot.services import claude_service, document_service, gdrive_service
+from bot.utils.album import collect_album_photos
 
 router = Router()
 
@@ -100,12 +101,12 @@ async def start_individual(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(IndividualContract.ru_passport, F.photo)
 async def ru_passport_photo(message: Message, state: FSMContext, bot: Bot) -> None:
+    pages = await collect_album_photos(message, state, bot)
+    if pages is None:
+        return
     await message.answer("Читаю паспорт...")
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    data = await bot.download_file(file.file_path)
     try:
-        passport = await claude_service.extract_ru_passport(data.read())
+        passport = await claude_service.extract_ru_passport(pages)
     except Exception as e:
         await message.answer(f"Не удалось прочитать паспорт: {e}\nПопробуйте ещё раз или введите данные текстом.")
         return
@@ -174,12 +175,12 @@ async def _ask_foreign_passport(message: Message, state: FSMContext) -> None:
 
 @router.message(IndividualContract.foreign_passport, F.photo)
 async def foreign_passport_photo(message: Message, state: FSMContext, bot: Bot) -> None:
+    pages = await collect_album_photos(message, state, bot)
+    if pages is None:
+        return
     await message.answer("Читаю загранпаспорт...")
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    data = await bot.download_file(file.file_path)
     try:
-        passport = await claude_service.extract_foreign_passport(data.read())
+        passport = await claude_service.extract_foreign_passport(pages[0])
     except Exception as e:
         await message.answer(f"Не удалось прочитать загранпаспорт: {e}\nВведите данные текстом.")
         return
@@ -397,12 +398,12 @@ async def tourist_add(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(IndividualContract.tourist_foreign, F.photo)
 async def tourist_foreign_photo(message: Message, state: FSMContext, bot: Bot) -> None:
+    pages = await collect_album_photos(message, state, bot)
+    if pages is None:
+        return
     await message.answer("Читаю загранпаспорт...")
-    photo = message.photo[-1]
-    file = await bot.get_file(photo.file_id)
-    data_bytes = await bot.download_file(file.file_path)
     try:
-        passport = await claude_service.extract_foreign_passport(data_bytes.read())
+        passport = await claude_service.extract_foreign_passport(pages[0])
     except Exception as e:
         await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
         return
