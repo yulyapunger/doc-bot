@@ -276,8 +276,38 @@ def _remove_table_row_with_placeholder(doc: Document, placeholder: str) -> None:
                 return
 
 
-def _fill_document(template_path: Path, replacements: dict, remove_row_placeholders: list | None = None) -> bytes:
+def _clone_table_row(doc: Document, anchor_placeholder: str, count: int, old_prefix: str, new_prefix_fmt: str) -> None:
+    """Клонирует строку таблицы, содержащую anchor_placeholder, count раз,
+    заменяя old_prefix (например 'TOURIST_2_') на new_prefix_fmt.format(n)
+    для n = 3, 4, ... — для отображения 3-го и последующих туристов/сотрудников."""
+    if count <= 0:
+        return
+    for table in doc.tables:
+        for row in table.rows:
+            row_text = "\n".join(p.text for cell in row.cells for p in cell.paragraphs)
+            if anchor_placeholder in row_text:
+                prev = row._element
+                for i in range(count):
+                    new_index = 3 + i
+                    new_row = deepcopy(row._element)
+                    for t in new_row.iter(qn('w:t')):
+                        if t.text and old_prefix in t.text:
+                            t.text = t.text.replace(old_prefix, new_prefix_fmt.format(new_index))
+                    prev.addnext(new_row)
+                    prev = new_row
+                return
+
+
+def _fill_document(
+    template_path: Path,
+    replacements: dict,
+    remove_row_placeholders: list | None = None,
+    clone_rows: list | None = None,
+) -> bytes:
     doc = Document(str(template_path))
+
+    for anchor_placeholder, count, old_prefix, new_prefix_fmt in clone_rows or []:
+        _clone_table_row(doc, anchor_placeholder, count, old_prefix, new_prefix_fmt)
 
     for placeholder in remove_row_placeholders or []:
         _remove_table_row_with_placeholder(doc, placeholder)
@@ -333,7 +363,7 @@ def build_individual_replacements(data: dict) -> dict:
     deposit  = float(data.get("deposit", 0))
     remaining = float(data.get("remaining", 0))
 
-    # Туристы (до 2 в таблице; остальные — в ADD_COND)
+    # Туристы — каждый получает свою строку TOURIST_{n}_* в таблице приложения
     def tourist_row(t):
         return {
             "name":        f"{t.get('surname_latin','')} {t.get('name_latin','')}".strip(),
@@ -345,6 +375,15 @@ def build_individual_replacements(data: dict) -> dict:
 
     t1 = tourist_row(tourists[0]) if len(tourists) > 0 else {}
     t2 = tourist_row(tourists[1]) if len(tourists) > 1 else {}
+
+    tourist_placeholders = {}
+    for idx, t in enumerate(tourists[2:], start=3):
+        row = tourist_row(t)
+        tourist_placeholders[f"TOURIST_{idx}_NAME"] = row.get("name", "")
+        tourist_placeholders[f"TOURIST_{idx}_GENDER"] = row.get("gender", "")
+        tourist_placeholders[f"TOURIST_{idx}_DOB"] = row.get("dob", "")
+        tourist_placeholders[f"TOURIST_{idx}_PASSPORT"] = row.get("passport", "")
+        tourist_placeholders[f"TOURIST_{idx}_VALID_UNTIL"] = row.get("valid_until", "")
 
     # Дополнительные условия — все в ADD_COND_1 через переносы строк
     add_cond_raw = data.get("additional_conditions", "") or ""
@@ -402,6 +441,7 @@ def build_individual_replacements(data: dict) -> dict:
         "REMAINING_WORDS":               num_to_words(remaining),
         "PASSPORT_SERIES_NUMBER_LONG":   format_passport_long(ru.get("series",""), ru.get("number","")),
         "PASSPORT_ISSUED_BY_AND_DATE":   format_issued_by_and_date(ru.get("issued_by",""), ru.get("issue_date","")),
+        **tourist_placeholders,
     }
 
 
@@ -507,8 +547,10 @@ def generate_individual_contract(data: dict) -> tuple[bytes, bytes]:
     """Возвращает (pdf_bytes, docx_bytes)."""
     replacements = build_individual_replacements(data)
     template = TEMPLATES_DIR / "contract_individual.docx"
-    remove_rows = ["{{TOURIST_2_NAME}}"] if len(data.get("tourists", [])) < 2 else []
-    docx_bytes = _fill_document(template, replacements, remove_rows)
+    tourist_count = len(data.get("tourists", []))
+    remove_rows = ["{{TOURIST_2_NAME}}"] if tourist_count < 2 else []
+    clone_rows = [("{{TOURIST_2_NAME}}", tourist_count - 2, "TOURIST_2_", "TOURIST_{}_")] if tourist_count > 2 else []
+    docx_bytes = _fill_document(template, replacements, remove_rows, clone_rows)
     pdf_bytes  = _docx_to_pdf(docx_bytes)
     return pdf_bytes, docx_bytes
 
