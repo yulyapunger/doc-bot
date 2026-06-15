@@ -5,9 +5,13 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.config import config
+from bot.handlers.contract_individual import STATE_RENDERERS as INDIVIDUAL_RENDERERS
+from bot.handlers.contract_legal import STATE_RENDERERS as LEGAL_RENDERERS
 from bot.keyboards.common import main_menu_kb
 
 router = Router()
+
+STATE_RENDERERS = {**INDIVIDUAL_RENDERERS, **LEGAL_RENDERERS}
 
 
 def _is_allowed(telegram_id: int) -> bool:
@@ -34,6 +38,24 @@ async def cancel_handler(callback: CallbackQuery, state: FSMContext) -> None:
         reply_markup=main_menu_kb(),
     )
     await callback.answer()
+
+
+@router.callback_query(lambda c: c.data == "go_back")
+async def go_back_handler(callback: CallbackQuery, state: FSMContext, session_factory: async_sessionmaker) -> None:
+    data = await state.get_data()
+    history = data.get("_history", [])
+    if not history:
+        await callback.answer("Это первый шаг", show_alert=True)
+        return
+    prev_state = history.pop()
+    await state.update_data(_history=history)
+    await state.set_state(prev_state)
+    renderer = STATE_RENDERERS.get(prev_state)
+    if renderer is None:
+        await callback.answer("Невозможно вернуться", show_alert=True)
+        return
+    await callback.answer()
+    await renderer(callback.message, state, session_factory)
 
 
 @router.callback_query(lambda c: c.data == "main_menu")

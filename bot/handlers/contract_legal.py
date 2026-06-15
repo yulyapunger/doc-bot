@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from bot.config import config
 from bot.database import crud
 from bot.keyboards.common import (
+    add_back_row,
     after_generate_kb,
+    back_cancel_kb,
     cancel_kb,
     confirm_kb,
     date_kb,
@@ -27,6 +29,7 @@ from bot.keyboards.common import (
     yes_no_kb,
 )
 from bot.services import claude_service, document_service, gdrive_service
+from bot.utils import navigation as nav
 from bot.utils.album import collect_album_photos
 
 router = Router()
@@ -154,8 +157,8 @@ async def _show_company_summary(message: Message, state: FSMContext) -> None:
         f"К/с: {c.get('correspondent_account')}\n"
         f"БИК: {c.get('bik')}"
     )
-    await state.set_state(LegalContract.confirm_company)
-    await message.answer(text, reply_markup=confirm_kb())
+    await nav.advance(state, LegalContract.confirm_company)
+    await message.answer(text, reply_markup=add_back_row(confirm_kb()))
 
 
 @router.callback_query(F.data == "confirm:yes", LegalContract.confirm_company)
@@ -166,8 +169,8 @@ async def company_confirmed(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "confirm:edit", LegalContract.confirm_company)
 async def company_edit(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(LegalContract.edit_field_select)
-    await callback.message.edit_text("Выберите поле:", reply_markup=edit_legal_fields_kb())
+    await nav.advance(state, LegalContract.edit_field_select)
+    await callback.message.edit_text("Выберите поле:", reply_markup=add_back_row(edit_legal_fields_kb()))
     await callback.answer()
 
 
@@ -178,8 +181,8 @@ async def select_edit_field(callback: CallbackQuery, state: FSMContext) -> None:
         await _show_company_summary_from_cb(callback, state)
         return
     await state.update_data(_edit_field=field)
-    await state.set_state(LegalContract.edit_field_value)
-    await callback.message.edit_text(f"Введите новое значение для '{field}':")
+    await nav.advance(state, LegalContract.edit_field_value)
+    await callback.message.edit_text(f"Введите новое значение для '{field}':", reply_markup=back_cancel_kb())
     await callback.answer()
 
 
@@ -191,7 +194,7 @@ async def save_edit_field(message: Message, state: FSMContext) -> None:
     company[field] = message.text.strip()
     await state.update_data(company=company)
     await state.set_state(LegalContract.edit_field_select)
-    await message.answer("Сохранено. Выберите ещё поле или 'Готово':", reply_markup=edit_legal_fields_kb())
+    await message.answer("Сохранено. Выберите ещё поле или 'Готово':", reply_markup=add_back_row(edit_legal_fields_kb()))
 
 
 async def _show_company_summary_from_cb(callback: CallbackQuery, state: FSMContext) -> None:
@@ -206,29 +209,29 @@ async def _show_company_summary_from_cb(callback: CallbackQuery, state: FSMConte
         f"Телефон: {c.get('phone')} / Email: {c.get('email')}"
     )
     await state.set_state(LegalContract.confirm_company)
-    await callback.message.edit_text(text, reply_markup=confirm_kb())
+    await callback.message.edit_text(text, reply_markup=add_back_row(confirm_kb()))
     await callback.answer()
 
 
 # ── Сотрудники ──────────────────────────────────────────────────────────────────
 
 async def _ask_employees(message: Message, state: FSMContext) -> None:
-    await state.set_state(LegalContract.employee_more)
+    await nav.advance(state, LegalContract.employee_more)
     await message.answer(
         "Шаг 3/8: Добавьте приезжающих лиц (сотрудников).\n"
         "Пришлите фото загранпаспорта или введите текстом:\n"
         "Фамилия латиницей\nИмя латиницей\nДата рождения\nНомер паспорта\nДата выдачи\nСрок действия",
-        reply_markup=yes_no_kb("emp:add", "emp:done"),
+        reply_markup=add_back_row(yes_no_kb("emp:add", "emp:done")),
     )
 
 
 @router.callback_query(F.data == "emp:add", LegalContract.employee_more)
 async def employee_add(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.set_state(LegalContract.employee_passport)
+    await nav.advance(state, LegalContract.employee_passport)
     await callback.message.edit_text(
         "Пришлите фото загранпаспорта сотрудника или введите данные:\n"
         "Фамилия (лат.)\nИмя (лат.)\nДата рождения (ДД.ММ.ГГГГ)\nНомер паспорта\nДата выдачи (ДД.ММ.ГГГГ)\nСрок действия (ДД.ММ.ГГГГ)",
-        reply_markup=cancel_kb(),
+        reply_markup=back_cancel_kb(),
     )
     await callback.answer()
 
@@ -283,15 +286,15 @@ async def _save_employee(message: Message, state: FSMContext, passport: dict) ->
     await message.answer(
         f"Сотрудник добавлен: {passport.get('surname_latin')} {passport.get('name_latin')}\n"
         f"Всего: {len(employees)}\n\nДобавить ещё?",
-        reply_markup=yes_no_kb("emp:add", "emp:done"),
+        reply_markup=add_back_row(yes_no_kb("emp:add", "emp:done")),
     )
 
 
 # ── Тур (аналогично физлицу) ───────────────────────────────────────────────────
 
 async def _ask_tour_legal(message: Message, state: FSMContext) -> None:
-    await state.set_state(LegalContract.tour_choice)
-    await message.answer("Шаг 4/8: Выбор тура:", reply_markup=tour_choice_kb())
+    await nav.advance(state, LegalContract.tour_choice)
+    await message.answer("Шаг 4/8: Выбор тура:", reply_markup=add_back_row(tour_choice_kb()))
 
 
 @router.callback_query(F.data == "tour:saved", LegalContract.tour_choice)
@@ -299,11 +302,11 @@ async def tour_from_saved(callback: CallbackQuery, state: FSMContext, session_fa
     async with session_factory() as session:
         templates = await crud.get_all_templates(session)
     if not templates:
-        await callback.message.edit_text("Шаблонов нет.", reply_markup=tour_choice_kb())
+        await callback.message.edit_text("Шаблонов нет.", reply_markup=add_back_row(tour_choice_kb()))
         await callback.answer()
         return
-    await state.set_state(LegalContract.tour_select_saved)
-    await callback.message.edit_text("Выберите тур:", reply_markup=templates_list_kb(templates))
+    await nav.advance(state, LegalContract.tour_select_saved)
+    await callback.message.edit_text("Выберите тур:", reply_markup=add_back_row(templates_list_kb(templates)))
     await callback.answer()
 
 
@@ -338,45 +341,45 @@ async def tour_selected(callback: CallbackQuery, state: FSMContext, session_fact
 @router.callback_query(F.data == "tour:new", LegalContract.tour_choice)
 async def tour_new(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(tour_template_id=None)
-    await state.set_state(LegalContract.tour_country)
-    await callback.message.edit_text("Страна:", reply_markup=cancel_kb())
+    await nav.advance(state, LegalContract.tour_country)
+    await callback.message.edit_text("Страна:", reply_markup=back_cancel_kb())
     await callback.answer()
 
 
 @router.message(LegalContract.tour_country, F.text)
 async def tour_country(message: Message, state: FSMContext) -> None:
     await state.update_data(country=message.text.strip())
-    await state.set_state(LegalContract.tour_city)
-    await message.answer("Город (или '-'):")
+    await nav.advance(state, LegalContract.tour_city)
+    await message.answer("Город (или '-'):", reply_markup=back_cancel_kb())
 
 
 @router.message(LegalContract.tour_city, F.text)
 async def tour_city(message: Message, state: FSMContext) -> None:
     val = message.text.strip()
     await state.update_data(city="" if val == "-" else val)
-    await state.set_state(LegalContract.tour_hotel)
-    await message.answer("Отель:")
+    await nav.advance(state, LegalContract.tour_hotel)
+    await message.answer("Отель:", reply_markup=back_cancel_kb())
 
 
 @router.message(LegalContract.tour_hotel, F.text)
 async def tour_hotel(message: Message, state: FSMContext) -> None:
     await state.update_data(hotel=message.text.strip())
-    await state.set_state(LegalContract.tour_checkin)
-    await message.answer("Дата заезда (ДД.ММ.ГГГГ):")
+    await nav.advance(state, LegalContract.tour_checkin)
+    await message.answer("Дата заезда (ДД.ММ.ГГГГ):", reply_markup=back_cancel_kb())
 
 
 @router.message(LegalContract.tour_checkin, F.text)
 async def tour_checkin(message: Message, state: FSMContext) -> None:
     await state.update_data(check_in_date=message.text.strip())
-    await state.set_state(LegalContract.tour_checkout)
-    await message.answer("Дата выезда (ДД.ММ.ГГГГ):")
+    await nav.advance(state, LegalContract.tour_checkout)
+    await message.answer("Дата выезда (ДД.ММ.ГГГГ):", reply_markup=back_cancel_kb())
 
 
 @router.message(LegalContract.tour_checkout, F.text)
 async def tour_checkout(message: Message, state: FSMContext) -> None:
     await state.update_data(check_out_date=message.text.strip())
-    await state.set_state(LegalContract.tour_nights)
-    await message.answer("Количество ночей:")
+    await nav.advance(state, LegalContract.tour_nights)
+    await message.answer("Количество ночей:", reply_markup=back_cancel_kb())
 
 
 @router.message(LegalContract.tour_nights, F.text)
@@ -386,47 +389,47 @@ async def tour_nights(message: Message, state: FSMContext) -> None:
     except ValueError:
         await message.answer("Введите число:")
         return
-    await state.set_state(LegalContract.tour_room_type)
-    await message.answer("Тип номера:", reply_markup=room_type_kb())
+    await nav.advance(state, LegalContract.tour_room_type)
+    await message.answer("Тип номера:", reply_markup=add_back_row(room_type_kb()))
 
 
 @router.callback_query(F.data.startswith("room_type:"), LegalContract.tour_room_type)
 async def tour_room_type(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(room_type=callback.data.split(":", 1)[1])
-    await state.set_state(LegalContract.tour_room_count)
-    await callback.message.edit_text("Кол-во номеров:", reply_markup=room_count_kb())
+    await nav.advance(state, LegalContract.tour_room_count)
+    await callback.message.edit_text("Кол-во номеров:", reply_markup=add_back_row(room_count_kb()))
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("room_count:"), LegalContract.tour_room_count)
 async def tour_room_count(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(room_count=callback.data.split(":", 1)[1])
-    await state.set_state(LegalContract.tour_meal)
-    await callback.message.edit_text("Питание:", reply_markup=meal_type_kb())
+    await nav.advance(state, LegalContract.tour_meal)
+    await callback.message.edit_text("Питание:", reply_markup=add_back_row(meal_type_kb()))
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("meal:"), LegalContract.tour_meal)
 async def tour_meal(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(meal_type=callback.data.split(":", 1)[1])
-    await state.set_state(LegalContract.tour_transfer)
-    await callback.message.edit_text("Трансфер:", reply_markup=transfer_kb())
+    await nav.advance(state, LegalContract.tour_transfer)
+    await callback.message.edit_text("Трансфер:", reply_markup=add_back_row(transfer_kb()))
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("transfer:"), LegalContract.tour_transfer)
 async def tour_transfer(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(transfer=callback.data.split(":", 1)[1])
-    await state.set_state(LegalContract.tour_insurance)
-    await callback.message.edit_text("Страховка:", reply_markup=insurance_kb())
+    await nav.advance(state, LegalContract.tour_insurance)
+    await callback.message.edit_text("Страховка:", reply_markup=add_back_row(insurance_kb()))
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("insurance:"), LegalContract.tour_insurance)
 async def tour_insurance(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(insurance=callback.data.split(":", 1)[1] == "yes")
-    await state.set_state(LegalContract.tour_additional)
-    await callback.message.edit_text("Дополнительные условия (или '-'):")
+    await nav.advance(state, LegalContract.tour_additional)
+    await callback.message.edit_text("Дополнительные условия (или '-'):", reply_markup=back_cancel_kb())
     await callback.answer()
 
 
@@ -434,22 +437,22 @@ async def tour_insurance(callback: CallbackQuery, state: FSMContext) -> None:
 async def tour_additional(message: Message, state: FSMContext) -> None:
     val = message.text.strip()
     await state.update_data(additional_conditions="" if val == "-" else val)
-    await state.set_state(LegalContract.tour_payment_deadline)
-    await message.answer("Дата полной оплаты (ДД.ММ.ГГГГ):")
+    await nav.advance(state, LegalContract.tour_payment_deadline)
+    await message.answer("Дата полной оплаты (ДД.ММ.ГГГГ):", reply_markup=back_cancel_kb())
 
 
 @router.message(LegalContract.tour_payment_deadline, F.text)
 async def tour_payment_deadline_handler(message: Message, state: FSMContext) -> None:
     await state.update_data(payment_deadline=message.text.strip())
-    await state.set_state(LegalContract.tour_save_template)
-    await message.answer("Сохранить тур как шаблон?", reply_markup=save_template_kb())
+    await nav.advance(state, LegalContract.tour_save_template)
+    await message.answer("Сохранить тур как шаблон?", reply_markup=add_back_row(save_template_kb()))
 
 
 @router.callback_query(F.data.startswith("save_tmpl:"), LegalContract.tour_save_template)
 async def tour_save_template(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data == "save_tmpl:yes":
-        await state.set_state(LegalContract.tour_template_name)
-        await callback.message.edit_text("Введите название шаблона:")
+        await nav.advance(state, LegalContract.tour_template_name)
+        await callback.message.edit_text("Введите название шаблона:", reply_markup=back_cancel_kb())
     else:
         await _ask_finances_legal(callback.message, state)
     await callback.answer()
@@ -486,11 +489,11 @@ async def tour_template_name_handler(
 # ── Финансы (юрлицо: полная оплата в течение 3 банковских дней) ───────────────
 
 async def _ask_finances_legal(message: Message, state: FSMContext) -> None:
-    await state.set_state(LegalContract.finance_total)
+    await nav.advance(state, LegalContract.finance_total)
     await message.answer(
         "Шаг 5/8: Итоговая сумма по договору (руб.):\n"
         "(Оплата производится в течение 3 банковских дней)",
-        reply_markup=cancel_kb(),
+        reply_markup=back_cancel_kb(),
     )
 
 
@@ -510,8 +513,8 @@ async def finance_total(message: Message, state: FSMContext) -> None:
 async def _ask_contract_date_legal(message: Message, state: FSMContext) -> None:
     today = date.today().strftime("%d.%m.%Y")
     await state.update_data(contract_date=today)
-    await state.set_state(LegalContract.contract_date)
-    await message.answer("Шаг 6/8: Дата договора:", reply_markup=date_kb(today))
+    await nav.advance(state, LegalContract.contract_date)
+    await message.answer("Шаг 6/8: Дата договора:", reply_markup=add_back_row(date_kb(today)))
 
 
 @router.callback_query(F.data == "date:keep", LegalContract.contract_date)
@@ -522,7 +525,7 @@ async def date_keep(callback: CallbackQuery, state: FSMContext, session_factory:
 
 @router.callback_query(F.data == "date:change", LegalContract.contract_date)
 async def date_change(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text("Введите дату договора (ДД.ММ.ГГГГ):")
+    await callback.message.edit_text("Введите дату договора (ДД.ММ.ГГГГ):", reply_markup=back_cancel_kb())
     await callback.answer()
 
 
@@ -539,10 +542,10 @@ async def _ask_contract_number_legal(
         initialized = await crud.counter_initialized(session, "legal")
 
     if not initialized:
-        await state.set_state(LegalContract.contract_number_init)
+        await nav.advance(state, LegalContract.contract_number_init)
         await message.answer(
             "Шаг 7/8: Первый договор юрлица.\nС какого номера начать нумерацию?",
-            reply_markup=cancel_kb(),
+            reply_markup=back_cancel_kb(),
         )
         return
 
@@ -550,8 +553,8 @@ async def _ask_contract_number_legal(
         number = await crud.get_next_number(session, "legal")
     formatted = f"{number}/кор"
     await state.update_data(contract_number=formatted, _suggested_number=formatted)
-    await state.set_state(LegalContract.contract_number)
-    await message.answer("Шаг 7/8: Номер договора:", reply_markup=number_kb(formatted))
+    await nav.advance(state, LegalContract.contract_number)
+    await message.answer("Шаг 7/8: Номер договора:", reply_markup=add_back_row(number_kb(formatted)))
 
 
 @router.message(LegalContract.contract_number_init, F.text)
@@ -567,8 +570,8 @@ async def contract_number_init(
         await crud.init_counter(session, "legal", start)
     formatted = f"{start}/кор"
     await state.update_data(contract_number=formatted, _suggested_number=formatted)
-    await state.set_state(LegalContract.contract_number)
-    await message.answer(f"Номер договора № {formatted}:", reply_markup=number_kb(formatted))
+    await nav.advance(state, LegalContract.contract_number)
+    await message.answer(f"Номер договора № {formatted}:", reply_markup=add_back_row(number_kb(formatted)))
 
 
 @router.callback_query(F.data == "number:keep", LegalContract.contract_number)
@@ -581,7 +584,7 @@ async def number_keep(
 
 @router.callback_query(F.data == "number:change", LegalContract.contract_number)
 async def number_change(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text("Введите номер договора (например: 45/кор):")
+    await callback.message.edit_text("Введите номер договора (например: 45/кор):", reply_markup=back_cancel_kb())
     await callback.answer()
 
 
@@ -686,3 +689,123 @@ async def get_docx(callback: CallbackQuery, state: FSMContext) -> None:
         BufferedInputFile(data["_docx_bytes"], filename=f"{filename}.docx"),
     )
     await callback.answer()
+
+
+# ── Рендереры для кнопки "Назад" ───────────────────────────────────────────────
+
+def _prompt(text, kb_factory=back_cancel_kb):
+    """Фабрика рендереров для простых текстовых шагов."""
+    async def _render(message: Message, state: FSMContext, session_factory: async_sessionmaker = None) -> None:
+        if callable(text):
+            data = await state.get_data()
+            value = text(data)
+        else:
+            value = text
+        await message.answer(value, reply_markup=kb_factory())
+    return _render
+
+
+async def _render_confirm_company(message: Message, state: FSMContext, session_factory: async_sessionmaker = None) -> None:
+    data = await state.get_data()
+    c = data["company"]
+    text = (
+        "Шаг 2/8: Проверьте данные компании:\n\n"
+        f"Наименование: {c.get('company_name')}\n"
+        f"Правовая форма: {c.get('legal_form')}\n"
+        f"Директор: {c.get('director_name')}\n"
+        f"ИНН: {c.get('inn')}\n"
+        f"КПП: {c.get('kpp')}\n"
+        f"ОГРН: {c.get('ogrn')}\n"
+        f"Юр. адрес: {c.get('legal_address')}\n"
+        f"Почт. адрес: {c.get('postal_address')}\n"
+        f"Телефон: {c.get('phone')}\n"
+        f"Email: {c.get('email')}\n"
+        f"Банк: {c.get('bank_name')}\n"
+        f"Р/с: {c.get('bank_account')}\n"
+        f"К/с: {c.get('correspondent_account')}\n"
+        f"БИК: {c.get('bik')}"
+    )
+    await message.answer(text, reply_markup=add_back_row(confirm_kb()))
+
+
+async def _render_employee_more(message: Message, state: FSMContext, session_factory: async_sessionmaker = None) -> None:
+    data = await state.get_data()
+    employees = data.get("employees", [])
+    await message.answer(
+        f"Сотрудников в списке: {len(employees)}\n\nДобавить ещё?",
+        reply_markup=add_back_row(yes_no_kb("emp:add", "emp:done")),
+    )
+
+
+async def _render_tour_select_saved(message: Message, state: FSMContext, session_factory: async_sessionmaker = None) -> None:
+    async with session_factory() as session:
+        templates = await crud.get_all_templates(session)
+    await message.answer("Выберите тур:", reply_markup=add_back_row(templates_list_kb(templates)))
+
+
+async def _render_contract_date(message: Message, state: FSMContext, session_factory: async_sessionmaker = None) -> None:
+    data = await state.get_data()
+    current = data.get("contract_date") or date.today().strftime("%d.%m.%Y")
+    await message.answer("Шаг 6/8: Дата договора:", reply_markup=add_back_row(date_kb(current)))
+
+
+async def _render_contract_number(message: Message, state: FSMContext, session_factory: async_sessionmaker = None) -> None:
+    data = await state.get_data()
+    number = data.get("contract_number") or data.get("_suggested_number", "")
+    await message.answer("Шаг 7/8: Номер договора:", reply_markup=add_back_row(number_kb(number)))
+
+
+STATE_RENDERERS = {
+    LegalContract.confirm_company.state: _render_confirm_company,
+    LegalContract.edit_field_select.state: _prompt(
+        "Выберите поле:", lambda: add_back_row(edit_legal_fields_kb())
+    ),
+    LegalContract.edit_field_value.state: _prompt(
+        lambda d: f"Введите новое значение для '{d.get('_edit_field')}':"
+    ),
+    LegalContract.employee_more.state: _render_employee_more,
+    LegalContract.employee_passport.state: _prompt(
+        "Пришлите фото загранпаспорта сотрудника или введите данные:\n"
+        "Фамилия (лат.)\nИмя (лат.)\nДата рождения (ДД.ММ.ГГГГ)\nНомер паспорта\nДата выдачи (ДД.ММ.ГГГГ)\nСрок действия (ДД.ММ.ГГГГ)"
+    ),
+    LegalContract.tour_choice.state: _prompt(
+        "Шаг 4/8: Выбор тура:", lambda: add_back_row(tour_choice_kb())
+    ),
+    LegalContract.tour_select_saved.state: _render_tour_select_saved,
+    LegalContract.tour_country.state: _prompt("Страна:"),
+    LegalContract.tour_city.state: _prompt("Город (или '-'):"),
+    LegalContract.tour_hotel.state: _prompt("Отель:"),
+    LegalContract.tour_checkin.state: _prompt("Дата заезда (ДД.ММ.ГГГГ):"),
+    LegalContract.tour_checkout.state: _prompt("Дата выезда (ДД.ММ.ГГГГ):"),
+    LegalContract.tour_nights.state: _prompt("Количество ночей:"),
+    LegalContract.tour_room_type.state: _prompt(
+        "Тип номера:", lambda: add_back_row(room_type_kb())
+    ),
+    LegalContract.tour_room_count.state: _prompt(
+        "Кол-во номеров:", lambda: add_back_row(room_count_kb())
+    ),
+    LegalContract.tour_meal.state: _prompt(
+        "Питание:", lambda: add_back_row(meal_type_kb())
+    ),
+    LegalContract.tour_transfer.state: _prompt(
+        "Трансфер:", lambda: add_back_row(transfer_kb())
+    ),
+    LegalContract.tour_insurance.state: _prompt(
+        "Страховка:", lambda: add_back_row(insurance_kb())
+    ),
+    LegalContract.tour_additional.state: _prompt("Дополнительные условия (или '-'):"),
+    LegalContract.tour_payment_deadline.state: _prompt("Дата полной оплаты (ДД.ММ.ГГГГ):"),
+    LegalContract.tour_save_template.state: _prompt(
+        "Сохранить тур как шаблон?", lambda: add_back_row(save_template_kb())
+    ),
+    LegalContract.tour_template_name.state: _prompt("Введите название шаблона:"),
+    LegalContract.finance_total.state: _prompt(
+        "Шаг 5/8: Итоговая сумма по договору (руб.):\n"
+        "(Оплата производится в течение 3 банковских дней)"
+    ),
+    LegalContract.contract_date.state: _render_contract_date,
+    LegalContract.contract_number_init.state: _prompt(
+        "Шаг 7/8: Первый договор юрлица.\nС какого номера начать нумерацию?"
+    ),
+    LegalContract.contract_number.state: _render_contract_number,
+}

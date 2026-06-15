@@ -41,10 +41,18 @@ def cancel_kb() -> InlineKeyboardMarkup:
 def back_cancel_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(
-        InlineKeyboardButton(text="Назад", callback_data="go_back"),
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="go_back"),
         InlineKeyboardButton(text="Отмена", callback_data="cancel"),
     )
     return builder.as_markup()
+
+
+def add_back_row(markup: InlineKeyboardMarkup) -> InlineKeyboardMarkup:
+    """Добавляет строку с кнопкой "⬅️ Назад" к существующей клавиатуре."""
+    markup.inline_keyboard.append(
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="go_back")]
+    )
+    return markup
 
 
 # ── Тип ввода ──────────────────────────────────────────────────────────────────
