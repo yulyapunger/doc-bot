@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from bot.config import config
 from bot.database.models import Base
 from bot.handlers import contract_individual, contract_legal, start, tour_templates
+from bot.middlewares.error_handling import ErrorHandlingMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
 
     dp["session_factory"] = session_factory
+
+    dp.message.middleware(ErrorHandlingMiddleware())
+    dp.callback_query.middleware(ErrorHandlingMiddleware())
 
     dp.include_router(start.router)
     dp.include_router(tour_templates.router)
