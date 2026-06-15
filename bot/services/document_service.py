@@ -283,11 +283,16 @@ def _docx_to_pdf(docx_bytes: bytes) -> bytes:
     with tempfile.TemporaryDirectory() as tmpdir:
         docx_path = os.path.join(tmpdir, "contract.docx")
         pdf_path  = os.path.join(tmpdir, "contract.pdf")
+        profile_dir = os.path.join(tmpdir, "loprofile")
         with open(docx_path, "wb") as f:
             f.write(docx_bytes)
         subprocess.run(
-            ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, docx_path],
-            check=True, capture_output=True,
+            [
+                "libreoffice", "--headless", "--norestore",
+                f"-env:UserInstallation=file://{profile_dir}",
+                "--convert-to", "pdf", "--outdir", tmpdir, docx_path,
+            ],
+            check=True, capture_output=True, timeout=120,
         )
         with open(pdf_path, "rb") as f:
             return f.read()

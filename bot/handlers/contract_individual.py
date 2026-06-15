@@ -1,3 +1,4 @@
+import asyncio
 import re
 from datetime import date
 
@@ -821,7 +822,7 @@ async def _generate_contract(
     ru = data["ru_passport"]
 
     try:
-        pdf_bytes, docx_bytes = document_service.generate_individual_contract(data)
+        pdf_bytes, docx_bytes = await asyncio.to_thread(document_service.generate_individual_contract, data)
     except Exception as e:
         await message.answer(f"Ошибка генерации документа: {e}")
         return

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 
 from aiogram import Bot, F, Router
@@ -606,7 +607,7 @@ async def _generate_legal_contract(
     number = data["contract_number"]
 
     try:
-        pdf_bytes, docx_bytes = document_service.generate_legal_contract(data)
+        pdf_bytes, docx_bytes = await asyncio.to_thread(document_service.generate_legal_contract, data)
     except Exception as e:
         await message.answer(f"Ошибка генерации: {e}")
         return
