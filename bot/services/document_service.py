@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 
 from docx import Document
@@ -233,7 +234,13 @@ def _insert_executor_signature(doc: Document) -> None:
                         .replace("/_____________/", "")
                         .replace("_____________", "")
                     )
-                para.add_run().add_picture(str(SIGNATURE_PATH), width=Inches(1.1))
+                # Изображение подписи кладём в отдельный параграф ниже,
+                # чтобы оно не "наезжало" на строку с ФИО при переносе.
+                img_para = cell.add_paragraph()
+                src_pPr = para._element.find(qn("w:pPr"))
+                if src_pPr is not None:
+                    img_para._element.insert(0, deepcopy(src_pPr))
+                img_para.add_run().add_picture(str(SIGNATURE_PATH), width=Inches(1.1))
                 break
 
 
