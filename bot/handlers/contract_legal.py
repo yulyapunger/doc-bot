@@ -549,7 +549,7 @@ async def _ask_contract_number_legal(
     async with session_factory() as session:
         number = await crud.get_next_number(session, "legal")
     formatted = f"{number}/кор"
-    await state.update_data(contract_number=formatted)
+    await state.update_data(contract_number=formatted, _suggested_number=formatted)
     await state.set_state(LegalContract.contract_number)
     await message.answer("Шаг 7/8: Номер договора:", reply_markup=number_kb(formatted))
 
@@ -566,7 +566,7 @@ async def contract_number_init(
     async with session_factory() as session:
         await crud.init_counter(session, "legal", start)
     formatted = f"{start}/кор"
-    await state.update_data(contract_number=formatted)
+    await state.update_data(contract_number=formatted, _suggested_number=formatted)
     await state.set_state(LegalContract.contract_number)
     await message.answer(f"Номер договора № {formatted}:", reply_markup=number_kb(formatted))
 
@@ -612,8 +612,9 @@ async def _generate_legal_contract(
         await message.answer(f"Ошибка генерации: {e}")
         return
 
-    async with session_factory() as session:
-        await crud.increment_counter(session, "legal")
+    if number == data.get("_suggested_number"):
+        async with session_factory() as session:
+            await crud.increment_counter(session, "legal")
 
     async with session_factory() as session:
         contract = await crud.save_contract(session, {
