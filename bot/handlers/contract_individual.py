@@ -1,5 +1,4 @@
 import asyncio
-import re
 from datetime import date
 
 from aiogram import Bot, F, Router
@@ -32,6 +31,7 @@ from bot.keyboards.common import (
 from bot.services import claude_service, document_service, gdrive_service
 from bot.utils import navigation as nav
 from bot.utils.album import collect_album_photos
+from bot.utils.amounts import parse_amount
 
 router = Router()
 
@@ -672,20 +672,10 @@ async def _ask_finances(message: Message, state: FSMContext) -> None:
     await message.answer("Шаг 7/10: Общая стоимость тура (руб.):", reply_markup=back_cancel_kb())
 
 
-def _parse_amount(text: str) -> float:
-    text = text.strip().replace(" ", "").replace("\xa0", "")
-    # "200.000" или "1.200.000" — точка как разделитель тысяч
-    if re.match(r'^\d{1,3}(\.\d{3})+$', text):
-        text = text.replace(".", "")
-    else:
-        text = text.replace(",", ".")
-    return float(text)
-
-
 @router.message(IndividualContract.finance_total, F.text)
 async def finance_total(message: Message, state: FSMContext) -> None:
     try:
-        total = _parse_amount(message.text)
+        total = parse_amount(message.text)
     except ValueError:
         await message.answer("Введите число (например: 150000 или 200.000):")
         return
@@ -697,7 +687,7 @@ async def finance_total(message: Message, state: FSMContext) -> None:
 @router.message(IndividualContract.finance_deposit, F.text)
 async def finance_deposit(message: Message, state: FSMContext) -> None:
     try:
-        deposit = _parse_amount(message.text)
+        deposit = parse_amount(message.text)
     except ValueError:
         await message.answer("Введите число:")
         return

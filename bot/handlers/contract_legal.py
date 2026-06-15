@@ -31,6 +31,7 @@ from bot.keyboards.common import (
 from bot.services import claude_service, document_service, gdrive_service
 from bot.utils import navigation as nav
 from bot.utils.album import collect_album_photos
+from bot.utils.amounts import parse_amount
 
 router = Router()
 
@@ -546,9 +547,9 @@ async def _ask_finances_legal(message: Message, state: FSMContext) -> None:
 @router.message(LegalContract.finance_total, F.text)
 async def finance_total(message: Message, state: FSMContext) -> None:
     try:
-        total = float(message.text.strip().replace(" ", "").replace(",", "."))
+        total = parse_amount(message.text)
     except ValueError:
-        await message.answer("Введите число:")
+        await message.answer("Введите число (например: 150000 или 200.000):")
         return
     await state.update_data(total_price=total)
     await _ask_contract_date_legal(message, state)
