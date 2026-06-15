@@ -242,12 +242,12 @@ async def _show_company_summary_from_cb(callback: CallbackQuery, state: FSMConte
 # ── Сотрудники ──────────────────────────────────────────────────────────────────
 
 async def _ask_employees(message: Message, state: FSMContext) -> None:
-    await nav.advance(state, LegalContract.employee_more)
+    await nav.advance(state, LegalContract.employee_passport)
     await message.answer(
         "Шаг 3/8: Добавьте приезжающих лиц (сотрудников).\n"
-        "Пришлите фото загранпаспорта или введите текстом:\n"
-        "Фамилия латиницей\nИмя латиницей\nДата рождения\nНомер паспорта\nДата выдачи\nСрок действия",
-        reply_markup=add_back_row(yes_no_kb("emp:add", "emp:done")),
+        "Пришлите фото загранпаспорта сотрудника или введите данные:\n"
+        "Фамилия (лат.)\nИмя (лат.)\nДата рождения (ДД.ММ.ГГГГ)\nНомер паспорта\nДата выдачи (ДД.ММ.ГГГГ)\nСрок действия (ДД.ММ.ГГГГ)",
+        reply_markup=back_cancel_kb(),
     )
 
 
@@ -264,10 +264,6 @@ async def employee_add(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "emp:done", LegalContract.employee_more)
 async def employees_done(callback: CallbackQuery, state: FSMContext) -> None:
-    data = await state.get_data()
-    if not data.get("employees"):
-        await callback.answer("Добавьте хотя бы одного сотрудника", show_alert=True)
-        return
     await _ask_tour_legal(callback.message, state)
     await callback.answer()
 
