@@ -108,6 +108,32 @@ async def company_card_photo(message: Message, state: FSMContext, bot: Bot) -> N
     await _show_company_summary(message, state)
 
 
+@router.message(LegalContract.company_card, F.document)
+async def company_card_document(message: Message, state: FSMContext, bot: Bot) -> None:
+    mime = (message.document.mime_type or "").lower()
+    supported = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if mime not in supported:
+        await message.answer("Поддерживаются файлы JPEG, PNG и PDF.")
+        return
+    await message.answer("Читаю карточку компании...")
+    file = await bot.get_file(message.document.file_id)
+    raw = await bot.download_file(file.file_path)
+    img_bytes = raw.read()
+    if mime == "application/pdf":
+        card_input = claude_service.pdf_to_jpegs(img_bytes)
+        media_type = "image/jpeg"
+    else:
+        card_input = img_bytes
+        media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    try:
+        company = await claude_service.extract_company_card(card_input, media_type=media_type)
+    except Exception as e:
+        await message.answer(f"Не удалось прочитать карточку: {e}\nВведите данные текстом.")
+        return
+    await state.update_data(company=company)
+    await _show_company_summary(message, state)
+
+
 @router.message(LegalContract.company_card, F.text)
 async def company_card_text(message: Message, state: FSMContext) -> None:
     try:
@@ -254,6 +280,30 @@ async def employee_photo(message: Message, state: FSMContext, bot: Bot) -> None:
     await message.answer("Читаю загранпаспорт...")
     try:
         passport = await claude_service.extract_foreign_passport(pages[0])
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
+        return
+    await _save_employee(message, state, passport)
+
+
+@router.message(LegalContract.employee_passport, F.document)
+async def employee_document(message: Message, state: FSMContext, bot: Bot) -> None:
+    mime = (message.document.mime_type or "").lower()
+    supported = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if mime not in supported:
+        await message.answer("Поддерживаются файлы JPEG, PNG и PDF.")
+        return
+    await message.answer("Читаю загранпаспорт...")
+    file = await bot.get_file(message.document.file_id)
+    raw = await bot.download_file(file.file_path)
+    img_bytes = raw.read()
+    if mime == "application/pdf":
+        img_bytes = claude_service.pdf_to_jpeg(img_bytes)
+        media_type = "image/jpeg"
+    else:
+        media_type = "image/png" if mime == "image/png" else "image/jpeg"
+    try:
+        passport = await claude_service.extract_foreign_passport(img_bytes, media_type=media_type)
     except Exception as e:
         await message.answer(f"Ошибка: {e}\nВведите данные текстом.")
         return

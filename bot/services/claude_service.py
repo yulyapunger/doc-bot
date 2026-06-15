@@ -22,6 +22,11 @@ def pdf_to_jpegs(pdf_bytes: bytes) -> list[bytes]:
     return images
 
 
+def pdf_to_jpeg(pdf_bytes: bytes) -> bytes:
+    """Конвертирует первую страницу PDF в JPEG-изображение."""
+    return pdf_to_jpegs(pdf_bytes)[0]
+
+
 def _image_content(image_bytes: bytes, media_type: str = "image/jpeg") -> dict:
     return {
         "type": "image",
@@ -109,9 +114,13 @@ async def extract_foreign_passport(image_bytes: bytes, media_type: str = "image/
     return _parse_json(response.content[0].text)
 
 
-async def extract_company_card(image_bytes: bytes | None, text: str | None = None) -> dict:
+async def extract_company_card(
+    image_bytes: bytes | list[bytes] | None,
+    text: str | None = None,
+    media_type: str = "image/jpeg",
+) -> dict:
     """
-    Принимает фото карточки компании или текст.
+    Принимает фото карточки компании (или несколько страниц PDF) или текст.
     Возвращает:
       company_name, legal_form, director_name, inn, kpp, ogrn,
       legal_address, postal_address, phone, email, bank_name,
@@ -119,7 +128,8 @@ async def extract_company_card(image_bytes: bytes | None, text: str | None = Non
     """
     content: list[dict] = []
     if image_bytes:
-        content.append(_image_content(image_bytes))
+        pages = image_bytes if isinstance(image_bytes, list) else [image_bytes]
+        content.extend(_image_content(p, media_type) for p in pages)
 
     prompt = (
         "Извлеки реквизиты организации. "
