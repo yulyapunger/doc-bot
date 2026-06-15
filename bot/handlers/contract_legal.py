@@ -702,7 +702,6 @@ async def gdrive_upload(
     session_factory: async_sessionmaker,
 ) -> None:
     data = await state.get_data()
-    await callback.message.edit_reply_markup()
     await callback.message.answer("Загружаю на Google Drive...")
     try:
         file_id = gdrive_service.upload_contract(
@@ -715,7 +714,6 @@ async def gdrive_upload(
         await callback.message.answer("Загружено.")
     except Exception as e:
         await callback.message.answer(f"Ошибка: {e}")
-    await state.clear()
     await callback.answer()
 
 
