@@ -100,6 +100,19 @@ async def delete_template(session: AsyncSession, template_id: int) -> None:
 # ── Contracts ──────────────────────────────────────────────────────────────────
 
 async def save_contract(session: AsyncSession, data: dict) -> Contract:
+    """Создаёт договор или обновляет существующий с таким же номером
+    (при перегенерации договора с уже использованным номером)."""
+    result = await session.execute(
+        select(Contract).where(Contract.number == data["number"])
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        for key, value in data.items():
+            setattr(existing, key, value)
+        await session.commit()
+        await session.refresh(existing)
+        return existing
+
     contract = Contract(**data)
     session.add(contract)
     await session.commit()
