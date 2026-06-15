@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import os
 import re
@@ -231,7 +233,7 @@ def _insert_executor_signature(doc: Document) -> None:
                         .replace("/_____________/", "")
                         .replace("_____________", "")
                     )
-                para.add_run().add_picture(str(SIGNATURE_PATH), width=Inches(2))
+                para.add_run().add_picture(str(SIGNATURE_PATH), width=Inches(1.1))
                 break
 
 
@@ -258,8 +260,20 @@ def _add_page_breaks(doc: Document) -> None:
             paragraph.paragraph_format.page_break_before = True
 
 
-def _fill_document(template_path: Path, replacements: dict) -> bytes:
+def _remove_table_row_with_placeholder(doc: Document, placeholder: str) -> None:
+    for table in doc.tables:
+        for row in table.rows:
+            row_text = "\n".join(p.text for cell in row.cells for p in cell.paragraphs)
+            if placeholder in row_text:
+                row._element.getparent().remove(row._element)
+                return
+
+
+def _fill_document(template_path: Path, replacements: dict, remove_row_placeholders: list | None = None) -> bytes:
     doc = Document(str(template_path))
+
+    for placeholder in remove_row_placeholders or []:
+        _remove_table_row_with_placeholder(doc, placeholder)
 
     for paragraph in doc.paragraphs:
         _replace_in_paragraph(paragraph, replacements)
@@ -486,7 +500,8 @@ def generate_individual_contract(data: dict) -> tuple[bytes, bytes]:
     """Возвращает (pdf_bytes, docx_bytes)."""
     replacements = build_individual_replacements(data)
     template = TEMPLATES_DIR / "contract_individual.docx"
-    docx_bytes = _fill_document(template, replacements)
+    remove_rows = ["{{TOURIST_2_NAME}}"] if len(data.get("tourists", [])) < 2 else []
+    docx_bytes = _fill_document(template, replacements, remove_rows)
     pdf_bytes  = _docx_to_pdf(docx_bytes)
     return pdf_bytes, docx_bytes
 
