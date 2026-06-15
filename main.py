@@ -3,6 +3,7 @@ import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from bot.config import config
@@ -21,6 +22,9 @@ async def main() -> None:
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     bot = Bot(token=config.bot_token)
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Главное меню"),
+    ])
     dp = Dispatcher(storage=MemoryStorage())
 
     dp["session_factory"] = session_factory
