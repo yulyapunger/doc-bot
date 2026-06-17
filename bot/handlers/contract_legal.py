@@ -32,6 +32,7 @@ from bot.services import claude_service, document_service, gdrive_service
 from bot.utils import navigation as nav
 from bot.utils.album import collect_album_photos
 from bot.utils.amounts import parse_amount
+from bot.services import sheets_service
 
 router = Router()
 
@@ -367,6 +368,7 @@ async def tour_selected(callback: CallbackQuery, state: FSMContext, session_fact
         return
     await state.update_data(
         tour_template_id=template.id,
+        _sheet_tab_name=template.name,
         country=template.country,
         city=template.city or "",
         hotel=template.hotel,
@@ -528,7 +530,7 @@ async def tour_template_name_handler(
     }
     async with session_factory() as session:
         template = await crud.create_template(session, template_data, message.from_user.id)
-    await state.update_data(tour_template_id=template.id)
+    await state.update_data(tour_template_id=template.id, _sheet_tab_name=template.name)
     await message.answer(f"Шаблон '{template.name}' сохранён.")
     await _ask_finances_legal(message, state)
 
@@ -677,13 +679,34 @@ async def _generate_legal_contract(
         })
 
     filename = document_service.format_legal_filename(number, c.get("company_name", ""))
+    tour_name = f"{data.get('country', '')} {data.get('check_in_date', '')[:4] if data.get('check_in_date') else ''}".strip()
     await state.update_data(
         _contract_id=contract.id,
         _pdf_bytes=pdf_bytes,
         _docx_bytes=docx_bytes,
         _filename=filename,
-        _tour_name=f"{data.get('country', '')} {data.get('check_in_date', '')[:4] if data.get('check_in_date') else ''}".strip(),
+        _tour_name=tour_name,
     )
+
+    employees = data.get("employees", [])
+    names = [
+        f"{e.get('surname_latin', '')} {e.get('name_latin', '')}".strip()
+        for e in employees
+    ]
+    total = float(data.get("total_price", 0))
+    try:
+        sheets_service.append_contract_rows(
+            tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
+            names=names,
+            contract_number=number,
+            total_price=total,
+            phone=c.get("phone", ""),
+            email=c.get("email", ""),
+            payment_deadline="в течение 3 банк. дней",
+            remaining=total,
+        )
+    except Exception:
+        pass
 
     gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(

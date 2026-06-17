@@ -32,6 +32,7 @@ from bot.services import claude_service, document_service, gdrive_service
 from bot.utils import navigation as nav
 from bot.utils.album import collect_album_photos
 from bot.utils.amounts import parse_amount
+from bot.services import sheets_service
 
 router = Router()
 
@@ -498,6 +499,7 @@ async def tour_selected(callback: CallbackQuery, state: FSMContext, session_fact
         return
     tour_data = {
         "tour_template_id": template.id,
+        "_sheet_tab_name": template.name,
         "country": template.country,
         "city": template.city or "",
         "hotel": template.hotel,
@@ -660,7 +662,7 @@ async def tour_template_name_handler(
     }
     async with session_factory() as session:
         template = await crud.create_template(session, template_data, message.from_user.id)
-    await state.update_data(tour_template_id=template.id)
+    await state.update_data(tour_template_id=template.id, _sheet_tab_name=template.name)
     await message.answer(f"Шаблон '{template.name}' сохранён.")
     await _ask_finances(message, state)
 
@@ -835,13 +837,33 @@ async def _generate_contract(
         })
 
     filename = document_service.format_individual_filename(number, ru.get("full_name", ""))
+    tour_name = f"{data.get('country', '')} {data.get('check_in_date', '')[:4] if data.get('check_in_date') else ''}".strip()
     await state.update_data(
         _contract_id=contract.id,
         _pdf_bytes=pdf_bytes,
         _docx_bytes=docx_bytes,
         _filename=filename,
-        _tour_name=f"{data.get('country', '')} {data.get('check_in_date', '')[:4] if data.get('check_in_date') else ''}".strip(),
+        _tour_name=tour_name,
     )
+
+    tourists = data.get("tourists", [])
+    names = [
+        f"{t.get('surname_latin', '')} {t.get('name_latin', '')}".strip()
+        for t in tourists
+    ]
+    try:
+        sheets_service.append_contract_rows(
+            tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
+            names=names,
+            contract_number=number,
+            total_price=float(data.get("total_price", 0)),
+            phone=data.get("phone", ""),
+            email=data.get("email", ""),
+            payment_deadline=data.get("finance_payment_deadline", ""),
+            remaining=float(data.get("remaining", 0)),
+        )
+    except Exception:
+        pass
 
     gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(

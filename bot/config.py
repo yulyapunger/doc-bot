@@ -14,6 +14,7 @@ class Config:
     allowed_telegram_ids: set[int]
     google_credentials_json: str
     gdrive_root_folder_id: str
+    google_sheets_id: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -26,6 +27,7 @@ class Config:
             allowed_telegram_ids=allowed_ids,
             google_credentials_json=os.getenv("GOOGLE_CREDENTIALS_JSON", ""),
             gdrive_root_folder_id=os.getenv("GDRIVE_ROOT_FOLDER_ID", ""),
+            google_sheets_id=os.getenv("GOOGLE_SHEETS_ID", ""),
         )
 
 
