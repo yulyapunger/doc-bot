@@ -110,7 +110,7 @@ def append_contract_rows(
 
     total_str = f"{total_price:,.0f}".replace(",", " ")
     deposit_str = f"{deposit:,.0f}".replace(",", " ") if deposit else ""
-    remaining_str = f"{remaining:,.0f}".replace(",", " ") if remaining is not None else ""
+    first_data_row = start_row_idx + 1  # 1-indexed row number of first tourist
 
     rows = []
     for i, t in enumerate(tourists):
@@ -118,16 +118,18 @@ def append_contract_rows(
         passport = t.get("passport_number", "")
         valid_until = t.get("valid_until", "")
         dob = t.get("date_of_birth", "")
+        row_num = first_data_row + i
+        remaining_formula = f"=I{row_num}-J{row_num}"
         if i == 0:
             # A  B               C      D      E                 F        G            H    I          J            K
-            rows.append([name, contract_number, phone, email, payment_deadline, passport, valid_until, dob, total_str, deposit_str, remaining_str])
+            rows.append([name, contract_number, phone, email, payment_deadline, passport, valid_until, dob, total_str, deposit_str, remaining_formula])
         else:
-            rows.append([name, "", "", "", "", passport, valid_until, dob, "", "", ""])
+            rows.append([name, "", "", "", "", passport, valid_until, dob, "", "", remaining_formula])
 
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
         range=f"'{tab_name}'!A{start_row_idx + 1}",
-        valueInputOption="RAW",
+        valueInputOption="USER_ENTERED",
         insertDataOption="INSERT_ROWS",
         body={"values": rows},
     ).execute()
