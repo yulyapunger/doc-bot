@@ -855,6 +855,7 @@ async def _generate_contract(
             tourists=data.get("tourists", []),
             contract_number=number,
             total_price=float(data.get("total_price", 0)),
+            deposit=float(data.get("deposit", 0)),
             phone=data.get("phone", ""),
             email=data.get("email", ""),
             payment_deadline=data.get("finance_payment_deadline", ""),

@@ -698,6 +698,7 @@ async def _generate_legal_contract(
             tourists=data.get("employees", []),
             contract_number=number,
             total_price=total,
+            deposit=0,
             phone=c.get("phone", ""),
             email=c.get("email", ""),
             payment_deadline="в течение 3 банк. дней",

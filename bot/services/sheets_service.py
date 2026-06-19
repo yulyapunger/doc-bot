@@ -15,20 +15,21 @@ SCOPES = [
 ]
 
 HEADER = [
-    "Ф.И.О. (загранпаспорт)",
-    "№ договора",
-    "Стоимость тура, руб.",
-    "Телефон",
-    "Email",
-    "Дата полной оплаты",
-    "Остаток к доплате, руб.",
-    "№ загранпаспорта",
-    "Дата окончания паспорта",
-    "Дата рождения",
+    "Ф.И.О. (загранпаспорт)",   # A — individual
+    "№ договора",               # B — merged
+    "Телефон",                  # C — merged
+    "Email",                    # D — merged
+    "Дата полной оплаты",       # E — merged
+    "№ загранпаспорта",         # F — individual
+    "Дата окончания паспорта",  # G — individual
+    "Дата рождения",            # H — individual
+    "Стоимость тура, руб.",     # I — merged
+    "Оплачено, руб.",           # J — merged
+    "Остаток к доплате, руб.",  # K — merged
 ]
 
-SHARED_COLS = range(1, 7)   # B–G (0-indexed): общие для всех туристов договора
-TOTAL_COLS = len(HEADER)    # A–J
+# Колонки B, C, D, E, I, J, K (0-indexed: 1,2,3,4,8,9,10) — общие для договора
+SHARED_COLS = [1, 2, 3, 4, 8, 9, 10]
 
 
 def _get_service():
@@ -78,6 +79,7 @@ def append_contract_rows(
     tourists: list[dict],
     contract_number: str,
     total_price: float,
+    deposit: float,
     phone: str,
     email: str,
     payment_deadline: str,
@@ -107,6 +109,7 @@ def append_contract_rows(
     start_row_idx = len(current.get("values", []))  # 0-indexed, after existing rows
 
     total_str = f"{total_price:,.0f}".replace(",", " ")
+    deposit_str = f"{deposit:,.0f}".replace(",", " ") if deposit else ""
     remaining_str = f"{remaining:,.0f}".replace(",", " ") if remaining is not None else ""
 
     rows = []
@@ -116,9 +119,10 @@ def append_contract_rows(
         valid_until = t.get("valid_until", "")
         dob = t.get("date_of_birth", "")
         if i == 0:
-            rows.append([name, contract_number, total_str, phone, email, payment_deadline, remaining_str, passport, valid_until, dob])
+            # A  B               C      D      E                 F        G            H    I          J            K
+            rows.append([name, contract_number, phone, email, payment_deadline, passport, valid_until, dob, total_str, deposit_str, remaining_str])
         else:
-            rows.append([name, "", "", "", "", "", "", passport, valid_until, dob])
+            rows.append([name, "", "", "", "", passport, valid_until, dob, "", "", ""])
 
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
