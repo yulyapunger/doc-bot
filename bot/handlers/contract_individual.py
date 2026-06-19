@@ -849,15 +849,10 @@ async def _generate_contract(
         _tour_name=tour_name,
     )
 
-    tourists = data.get("tourists", [])
-    names = [
-        f"{t.get('surname_latin', '')} {t.get('name_latin', '')}".strip()
-        for t in tourists
-    ]
     try:
         sheets_service.append_contract_rows(
             tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
-            names=names,
+            tourists=data.get("tourists", []),
             contract_number=number,
             total_price=float(data.get("total_price", 0)),
             phone=data.get("phone", ""),

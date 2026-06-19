@@ -22,9 +22,13 @@ HEADER = [
     "Email",
     "Дата полной оплаты",
     "Остаток к доплате, руб.",
+    "№ загранпаспорта",
+    "Дата окончания паспорта",
+    "Дата рождения",
 ]
 
-PRICE_COL_IDX = 2  # column C, 0-indexed
+SHARED_COLS = range(1, 7)   # B–G (0-indexed): общие для всех туристов договора
+TOTAL_COLS = len(HEADER)    # A–J
 
 
 def _get_service():
@@ -71,7 +75,7 @@ def _write_header(service, spreadsheet_id: str, tab_name: str) -> None:
 
 def append_contract_rows(
     tab_name: str,
-    names: list[str],
+    tourists: list[dict],
     contract_number: str,
     total_price: float,
     phone: str,
@@ -81,17 +85,18 @@ def append_contract_rows(
 ) -> None:
     """
     Appends one row per tourist/employee to the tab named after the tour.
-    Merges the price cell (column C) vertically if there are multiple people.
+    Columns B–G are merged vertically (shared for contract).
+    Columns H–J (passport number, valid until, dob) are individual per tourist.
     """
     spreadsheet_id = config.google_sheets_id
     if not spreadsheet_id or not config.google_credentials_json:
         logger.warning("Sheets: GOOGLE_SHEETS_ID или GOOGLE_CREDENTIALS_JSON не заданы, пропускаю")
         return
-    if not names:
-        logger.warning("Sheets: список имён пуст, пропускаю")
+    if not tourists:
+        logger.warning("Sheets: список туристов пуст, пропускаю")
         return
 
-    logger.info("Sheets: записываю %d строк в вкладку '%s', spreadsheet_id=%s", len(names), tab_name, spreadsheet_id)
+    logger.info("Sheets: записываю %d строк в вкладку '%s', spreadsheet_id=%s", len(tourists), tab_name, spreadsheet_id)
     service = _get_service()
     sheet_id = _ensure_tab(service, spreadsheet_id, tab_name)
 
@@ -105,11 +110,15 @@ def append_contract_rows(
     remaining_str = f"{remaining:,.0f}".replace(",", " ") if remaining is not None else ""
 
     rows = []
-    for i, name in enumerate(names):
+    for i, t in enumerate(tourists):
+        name = f"{t.get('surname_latin', '')} {t.get('name_latin', '')}".strip()
+        passport = t.get("passport_number", "")
+        valid_until = t.get("valid_until", "")
+        dob = t.get("date_of_birth", "")
         if i == 0:
-            rows.append([name, contract_number, total_str, phone, email, payment_deadline, remaining_str])
+            rows.append([name, contract_number, total_str, phone, email, payment_deadline, remaining_str, passport, valid_until, dob])
         else:
-            rows.append([name, "", "", "", "", "", ""])
+            rows.append([name, "", "", "", "", "", "", passport, valid_until, dob])
 
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
@@ -119,7 +128,7 @@ def append_contract_rows(
         body={"values": rows},
     ).execute()
 
-    if len(names) > 1:
+    if len(tourists) > 1:
         # Merge columns B–G (indices 1–6) — all shared fields
         requests = [
             {
@@ -127,14 +136,14 @@ def append_contract_rows(
                     "range": {
                         "sheetId": sheet_id,
                         "startRowIndex": start_row_idx,
-                        "endRowIndex": start_row_idx + len(names),
+                        "endRowIndex": start_row_idx + len(tourists),
                         "startColumnIndex": col,
                         "endColumnIndex": col + 1,
                     },
                     "mergeType": "MERGE_ALL",
                 }
             }
-            for col in range(1, 7)
+            for col in SHARED_COLS
         ]
         service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
