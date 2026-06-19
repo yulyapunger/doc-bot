@@ -109,7 +109,7 @@ def append_contract_rows(
         if i == 0:
             rows.append([name, contract_number, total_str, phone, email, payment_deadline, remaining_str])
         else:
-            rows.append([name, contract_number, "", phone, email, payment_deadline, remaining_str])
+            rows.append([name, "", "", "", "", "", ""])
 
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
@@ -120,18 +120,23 @@ def append_contract_rows(
     ).execute()
 
     if len(names) > 1:
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=spreadsheet_id,
-            body={"requests": [{
+        # Merge columns B–G (indices 1–6) — all shared fields
+        requests = [
+            {
                 "mergeCells": {
                     "range": {
                         "sheetId": sheet_id,
                         "startRowIndex": start_row_idx,
                         "endRowIndex": start_row_idx + len(names),
-                        "startColumnIndex": PRICE_COL_IDX,
-                        "endColumnIndex": PRICE_COL_IDX + 1,
+                        "startColumnIndex": col,
+                        "endColumnIndex": col + 1,
                     },
                     "mergeType": "MERGE_ALL",
                 }
-            }]},
+            }
+            for col in range(1, 7)
+        ]
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests},
         ).execute()
