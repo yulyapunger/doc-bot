@@ -32,6 +32,13 @@ HEADER = [
 SHARED_COLS = [1, 2, 3, 4, 8, 9, 10]
 
 
+def _text(value: str) -> str:
+    """Принудительно задаёт текстовый тип ячейки (префикс ' скрыт в UI)."""
+    if value and value[0] in ("+", "-", "=", "@"):
+        return f"'{value}"
+    return value
+
+
 def _get_service():
     creds_data = json.loads(config.google_credentials_json)
     if creds_data.get("type") == "service_account":
@@ -121,10 +128,10 @@ def append_contract_rows(
         row_num = first_data_row + i
         remaining_formula = f"=I{row_num}-J{row_num}"
         if i == 0:
-            # A  B               C      D      E                 F        G            H    I          J            K
-            rows.append([name, contract_number, phone, email, payment_deadline, passport, valid_until, dob, total_val, deposit_val, remaining_formula])
+            # A  B               C               D               E                 F                 G            H    I          J            K
+            rows.append([name, contract_number, _text(phone), _text(email), payment_deadline, _text(passport), valid_until, dob, total_val, deposit_val, remaining_formula])
         else:
-            rows.append([name, "", "", "", "", passport, valid_until, dob, "", "", remaining_formula])
+            rows.append([name, "", "", "", "", _text(passport), valid_until, dob, "", "", remaining_formula])
 
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
