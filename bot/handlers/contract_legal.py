@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import date
 
 from aiogram import Bot, F, Router
@@ -29,6 +30,8 @@ from bot.keyboards.common import (
     yes_no_kb,
 )
 from bot.services import claude_service, document_service, gdrive_service
+logger = logging.getLogger(__name__)
+
 from bot.utils import navigation as nav
 from bot.utils.album import collect_album_photos
 from bot.utils.amounts import parse_amount
@@ -705,8 +708,8 @@ async def _generate_legal_contract(
             payment_deadline="в течение 3 банк. дней",
             remaining=total,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Sheets (legal): ошибка записи: %s", e, exc_info=True)
 
     gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(

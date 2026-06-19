@@ -1,10 +1,13 @@
 import json
+import logging
 
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceCredentials
 from googleapiclient.discovery import build
 
 from bot.config import config
+
+logger = logging.getLogger(__name__)
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
@@ -82,10 +85,13 @@ def append_contract_rows(
     """
     spreadsheet_id = config.google_sheets_id
     if not spreadsheet_id or not config.google_credentials_json:
+        logger.warning("Sheets: GOOGLE_SHEETS_ID или GOOGLE_CREDENTIALS_JSON не заданы, пропускаю")
         return
     if not names:
+        logger.warning("Sheets: список имён пуст, пропускаю")
         return
 
+    logger.info("Sheets: записываю %d строк в вкладку '%s', spreadsheet_id=%s", len(names), tab_name, spreadsheet_id)
     service = _get_service()
     sheet_id = _ensure_tab(service, spreadsheet_id, tab_name)
 
