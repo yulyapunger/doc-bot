@@ -108,8 +108,8 @@ def append_contract_rows(
     ).execute()
     start_row_idx = len(current.get("values", []))  # 0-indexed, after existing rows
 
-    total_str = f"{total_price:,.0f}".replace(",", " ")
-    deposit_str = f"{deposit:,.0f}".replace(",", " ") if deposit else ""
+    total_val = int(total_price)
+    deposit_val = int(deposit) if deposit else 0
     first_data_row = start_row_idx + 1  # 1-indexed row number of first tourist
 
     rows = []
@@ -122,7 +122,7 @@ def append_contract_rows(
         remaining_formula = f"=I{row_num}-J{row_num}"
         if i == 0:
             # A  B               C      D      E                 F        G            H    I          J            K
-            rows.append([name, contract_number, phone, email, payment_deadline, passport, valid_until, dob, total_str, deposit_str, remaining_formula])
+            rows.append([name, contract_number, phone, email, payment_deadline, passport, valid_until, dob, total_val, deposit_val, remaining_formula])
         else:
             rows.append([name, "", "", "", "", passport, valid_until, dob, "", "", remaining_formula])
 
