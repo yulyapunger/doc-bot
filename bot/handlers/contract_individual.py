@@ -854,6 +854,7 @@ async def _generate_contract(
             tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
             tourists=data.get("tourists", []),
             contract_number=number,
+            contract_date=data.get("contract_date", ""),
             total_price=float(data.get("total_price", 0)),
             deposit=float(data.get("deposit", 0)),
             phone=data.get("phone", ""),

@@ -697,6 +697,7 @@ async def _generate_legal_contract(
             tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
             tourists=data.get("employees", []),
             contract_number=number,
+            contract_date=data.get("contract_date", ""),
             total_price=total,
             deposit=0,
             phone=c.get("phone", ""),

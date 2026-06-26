@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime
 
 from google.oauth2.credentials import Credentials
 from google.oauth2.service_account import Credentials as ServiceCredentials
@@ -23,13 +24,14 @@ HEADER = [
     "№ загранпаспорта",         # F — individual
     "Дата окончания паспорта",  # G — individual
     "Дата рождения",            # H — individual
-    "Стоимость тура, руб.",     # I — merged
-    "Оплачено, руб.",           # J — merged
-    "Остаток к доплате, руб.",  # K — merged
+    "Возраст",                  # I — individual
+    "Стоимость тура, руб.",     # J — merged
+    "Оплачено, руб.",           # K — merged
+    "Остаток к доплате, руб.",  # L — merged
 ]
 
-# Колонки B, C, D, E, I, J, K (0-indexed: 1,2,3,4,8,9,10) — общие для договора
-SHARED_COLS = [1, 2, 3, 4, 8, 9, 10]
+# Колонки B, C, D, E, J, K, L (0-indexed: 1,2,3,4,9,10,11) — общие для договора
+SHARED_COLS = [1, 2, 3, 4, 9, 10, 11]
 
 
 def _text(value: str) -> str:
@@ -37,6 +39,18 @@ def _text(value: str) -> str:
     if value and value[0] in ("+", "-", "=", "@"):
         return f"'{value}"
     return value
+
+
+def _age(dob_str: str, contract_date_str: str) -> int | str:
+    """Возраст на дату договора. Форматы DD.MM.YYYY."""
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            dob = datetime.strptime(dob_str.strip(), fmt)
+            ref = datetime.strptime(contract_date_str.strip(), fmt)
+            return ref.year - dob.year - ((ref.month, ref.day) < (dob.month, dob.day))
+        except ValueError:
+            continue
+    return ""
 
 
 def _get_service():
@@ -85,6 +99,7 @@ def append_contract_rows(
     tab_name: str,
     tourists: list[dict],
     contract_number: str,
+    contract_date: str,
     total_price: float,
     deposit: float,
     phone: str,
@@ -94,8 +109,8 @@ def append_contract_rows(
 ) -> None:
     """
     Appends one row per tourist/employee to the tab named after the tour.
-    Columns B–G are merged vertically (shared for contract).
-    Columns H–J (passport number, valid until, dob) are individual per tourist.
+    Columns B–E, J–L are merged (shared for contract).
+    Columns F–I (passport, valid until, dob, age) are individual per tourist.
     """
     spreadsheet_id = config.google_sheets_id
     if not spreadsheet_id or not config.google_credentials_json:
@@ -113,11 +128,11 @@ def append_contract_rows(
         spreadsheetId=spreadsheet_id,
         range=f"'{tab_name}'!A:A",
     ).execute()
-    start_row_idx = len(current.get("values", []))  # 0-indexed, after existing rows
+    start_row_idx = len(current.get("values", []))  # 0-indexed
 
     total_val = int(total_price)
     deposit_val = int(deposit) if deposit else 0
-    first_data_row = start_row_idx + 1  # 1-indexed row number of first tourist
+    first_data_row = start_row_idx + 1  # 1-indexed
 
     rows = []
     for i, t in enumerate(tourists):
@@ -125,13 +140,14 @@ def append_contract_rows(
         passport = t.get("passport_number", "")
         valid_until = t.get("valid_until", "")
         dob = t.get("date_of_birth", "")
+        age = _age(dob, contract_date) if dob and contract_date else ""
         row_num = first_data_row + i
-        remaining_formula = f"=I{row_num}-J{row_num}"
+        remaining_formula = f"=J{row_num}-K{row_num}"
         if i == 0:
-            # A  B               C               D               E                 F                 G            H    I          J            K
-            rows.append([name, contract_number, _text(phone), _text(email), payment_deadline, _text(passport), valid_until, dob, total_val, deposit_val, remaining_formula])
+            # A     B                C               D               E                 F                 G            H    I     J           K             L
+            rows.append([name, contract_number, _text(phone), _text(email), payment_deadline, _text(passport), valid_until, dob, age, total_val, deposit_val, remaining_formula])
         else:
-            rows.append([name, "", "", "", "", _text(passport), valid_until, dob, "", "", remaining_formula])
+            rows.append([name, "", "", "", "", _text(passport), valid_until, dob, age, "", "", remaining_formula])
 
     service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id,
@@ -142,7 +158,6 @@ def append_contract_rows(
     ).execute()
 
     if len(tourists) > 1:
-        # Merge columns B–G (indices 1–6) — all shared fields
         requests = [
             {
                 "mergeCells": {
