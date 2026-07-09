@@ -692,9 +692,10 @@ async def _generate_legal_contract(
     )
 
     total = float(data.get("total_price", 0))
+    _tab_name = data.get("_sheet_tab_name") or tour_name or "Прочие"
     try:
         sheets_service.append_contract_rows(
-            tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
+            tab_name=_tab_name,
             tourists=data.get("employees", []),
             contract_number=number,
             contract_date=data.get("contract_date", ""),
@@ -707,6 +708,13 @@ async def _generate_legal_contract(
         )
     except Exception as e:
         logger.error("Sheets (legal): ошибка записи: %s", e, exc_info=True)
+    try:
+        sheets_service.upsert_tourist_in_client_db(
+            tab_name=_tab_name,
+            tourists=data.get("employees", []),
+        )
+    except Exception as e:
+        logger.error("Sheets (legal): ошибка записи в клиентскую базу: %s", e, exc_info=True)
 
     gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(

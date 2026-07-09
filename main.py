@@ -10,6 +10,7 @@ from bot.config import config
 from bot.database.models import Base
 from bot.handlers import contract_individual, contract_legal, start, tour_templates
 from bot.middlewares.error_handling import ErrorHandlingMiddleware
+from bot.services.birthday_service import birthday_worker
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ async def main() -> None:
     dp.include_router(contract_individual.router)
     dp.include_router(contract_legal.router)
 
+    asyncio.create_task(birthday_worker(bot))
     logger.info("Bot started")
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

@@ -849,9 +849,10 @@ async def _generate_contract(
         _tour_name=tour_name,
     )
 
+    _tab_name = data.get("_sheet_tab_name") or tour_name or "Прочие"
     try:
         sheets_service.append_contract_rows(
-            tab_name=data.get("_sheet_tab_name") or tour_name or "Прочие",
+            tab_name=_tab_name,
             tourists=data.get("tourists", []),
             contract_number=number,
             contract_date=data.get("contract_date", ""),
@@ -864,6 +865,14 @@ async def _generate_contract(
         )
     except Exception as e:
         logger.error("Sheets (individual): ошибка записи: %s", e, exc_info=True)
+    try:
+        sheets_service.upsert_tourist_in_client_db(
+            tab_name=_tab_name,
+            tourists=data.get("tourists", []),
+            phone=data.get("phone", ""),
+        )
+    except Exception as e:
+        logger.error("Sheets (individual): ошибка записи в клиентскую базу: %s", e, exc_info=True)
 
     gdrive_ok = bool(config.google_credentials_json and config.gdrive_root_folder_id)
     await message.answer_document(
